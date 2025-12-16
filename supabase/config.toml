@@ -1,7 +1,56 @@
 project_id = "oovoarwujekgfesjskzv"
 
-[functions.stripe-webhook]
+[functions.ai-chat]
+verify_jwt = false
+
+[functions.generate-content]
+verify_jwt = false
+
+[functions.generate-document]
+verify_jwt = false
+
+[functions.generate-document-json]
+verify_jwt = false
+
+[functions.generate-document-image]
+verify_jwt = false
+
+[functions.generate-presentation]
+verify_jwt = false
+
+[functions.generate-spreadsheet]
+verify_jwt = false
+
+[functions.generate-voiceover]
+verify_jwt = false
+
+[functions.chat-pdf]
+verify_jwt = false
+
+[functions.database-proxy]
+verify_jwt = false
+
+[functions.create-checkout-session]
+verify_jwt = false
+
+[functions.manage-subscription]
+verify_jwt = false
+
+[functions.send-email]
+verify_jwt = false
+
+[functions.send-welcome-email]
+verify_jwt = false
+
+[functions.notify-payment-success]
+verify_jwt = false
+
+[functions.notify-usage-limit]
 verify_jwt = false
 
 [functions.notify-subscription-change]
 verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+

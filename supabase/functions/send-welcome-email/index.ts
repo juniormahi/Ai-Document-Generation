@@ -127,10 +127,15 @@ serve(async (req) => {
   }
 
   try {
-    // Verify Firebase token
+    // Verify Firebase token (prefer x-client-info; fallback to Authorization)
+    const clientInfo = req.headers.get("x-client-info") ?? "";
+    const firebaseTokenFromClientInfo = clientInfo.startsWith("firebase:")
+      ? clientInfo.slice("firebase:".length)
+      : null;
+
     const authHeader = req.headers.get('Authorization');
-    const tokenResult = await verifyFirebaseToken(authHeader);
-    
+    const tokenResult = await verifyFirebaseToken(firebaseTokenFromClientInfo ?? authHeader);
+
     if (!tokenResult) {
       throw new Error('User not authenticated');
     }
