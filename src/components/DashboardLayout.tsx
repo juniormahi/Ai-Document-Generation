@@ -26,6 +26,7 @@ import { useTheme } from "next-themes";
 import { fileHistoryDb, userRolesDb } from "@/lib/databaseProxy";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { HealthStatus } from "@/components/HealthStatus";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -309,7 +310,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Desktop Header */}
         <header className="hidden lg:flex h-14 border-b border-border/40 items-center justify-between px-6">
-          <div />
+          <HealthStatus />
           <div className="flex items-center gap-3">
             <Link to="/tools/document-creator">
               <Button size="sm" className="h-8 gap-1.5 bg-foreground text-background hover:bg-foreground/90 text-xs font-medium">
