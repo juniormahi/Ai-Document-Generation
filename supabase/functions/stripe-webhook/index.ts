@@ -311,7 +311,7 @@ serve(async (req) => {
     let event: Stripe.Event;
     
     try {
-      event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
       console.log('Webhook event verified:', event.type, event.id);
     } catch (err: any) {
       console.error('Webhook signature verification failed:', err.message);
