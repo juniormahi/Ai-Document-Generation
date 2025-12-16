@@ -19,13 +19,16 @@ interface AuthResult {
 /**
  * Verify Firebase ID token and get user info
  */
-export async function verifyFirebaseToken(authHeader: string | null): Promise<{ userId: string; email?: string } | null> {
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.log("No valid Authorization header found");
+export async function verifyFirebaseToken(tokenOrHeader: string | null): Promise<{ userId: string; email?: string } | null> {
+  if (!tokenOrHeader) {
+    console.log("No Firebase token provided");
     return null;
   }
 
-  const idToken = authHeader.replace("Bearer ", "");
+  const idToken = tokenOrHeader.startsWith("Bearer ")
+    ? tokenOrHeader.slice("Bearer ".length)
+    : tokenOrHeader;
+
   
   try {
     // Verify the Firebase ID token using Google's public endpoint
@@ -100,11 +103,16 @@ export async function getUserPremiumStatus(userId: string): Promise<boolean> {
  * Complete authentication flow: verify token and get premium status
  */
 export async function authenticateRequest(req: Request): Promise<AuthResult> {
+  const clientInfo = req.headers.get("x-client-info") ?? "";
+  const firebaseTokenFromClientInfo = clientInfo.startsWith("firebase:")
+    ? clientInfo.slice("firebase:".length)
+    : null;
+
   const authHeader = req.headers.get("Authorization");
-  
-  // Verify Firebase token
-  const tokenResult = await verifyFirebaseToken(authHeader);
-  
+
+  // Prefer Firebase token tunneled through x-client-info; fallback to Authorization for legacy clients.
+  const tokenResult = await verifyFirebaseToken(firebaseTokenFromClientInfo ?? authHeader);
+
   if (!tokenResult) {
     return {
       userId: "",

@@ -29,8 +29,10 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
   if (!token) {
     throw new Error("Please sign in to continue");
   }
-  
+
+  // Important: do not override Authorization (platform JWT verification).
+  // We tunnel the Firebase ID token through an allowed header.
   return {
-    "Authorization": `Bearer ${token}`,
+    "x-client-info": `firebase:${token}`,
   };
 }

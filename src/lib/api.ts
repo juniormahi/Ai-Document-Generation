@@ -10,10 +10,11 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   if (!user) {
     throw new Error("Please sign in to continue");
   }
-  
+
   const token = await user.getIdToken();
+  // Do NOT override Authorization (platform JWT verification). See _shared/auth.ts.
   return {
-    Authorization: `Bearer ${token}`,
+    "x-client-info": `firebase:${token}`,
   };
 }
 
