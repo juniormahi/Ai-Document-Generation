@@ -84,7 +84,10 @@ export default function Auth({ mode = "signin" }: { mode?: "signin" | "signup" }
   const handleGoogleSignIn = async () => {
     setLoading(true);
     try {
-      await signInWithGoogle();
+      const { isNewUser } = await signInWithGoogle();
+      if (isNewUser) {
+        setTimeout(sendWelcomeEmail, 1000);
+      }
       navigate("/dashboard");
     } catch (error) {
       // Error handled by AuthContext
@@ -96,7 +99,10 @@ export default function Auth({ mode = "signin" }: { mode?: "signin" | "signup" }
   const handleGithubSignIn = async () => {
     setLoading(true);
     try {
-      await signInWithGithub();
+      const { isNewUser } = await signInWithGithub();
+      if (isNewUser) {
+        setTimeout(sendWelcomeEmail, 1000);
+      }
       navigate("/dashboard");
     } catch (error) {
       // Error handled by AuthContext

@@ -9,6 +9,7 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber,
   ConfirmationResult,
+  getAdditionalUserInfo,
 } from "firebase/auth";
 import { auth, googleProvider, githubProvider } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
@@ -18,8 +19,8 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  signInWithGithub: () => Promise<void>;
+  signInWithGoogle: () => Promise<{ isNewUser: boolean }>;
+  signInWithGithub: () => Promise<{ isNewUser: boolean }>;
   signInWithPhone: (phoneNumber: string, appVerifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
   signOut: () => Promise<void>;
 }
@@ -74,13 +75,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (): Promise<{ isNewUser: boolean }> => {
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const additionalInfo = getAdditionalUserInfo(result);
+      const isNewUser = additionalInfo?.isNewUser ?? false;
       toast({
-        title: "Welcome!",
-        description: "You've successfully signed in with Google.",
+        title: isNewUser ? "Welcome!" : "Welcome back!",
+        description: `You've successfully signed in with Google.`,
       });
+      return { isNewUser };
     } catch (error: any) {
       toast({
         title: "Google sign in failed",
@@ -91,13 +95,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signInWithGithub = async () => {
+  const signInWithGithub = async (): Promise<{ isNewUser: boolean }> => {
     try {
-      await signInWithPopup(auth, githubProvider);
+      const result = await signInWithPopup(auth, githubProvider);
+      const additionalInfo = getAdditionalUserInfo(result);
+      const isNewUser = additionalInfo?.isNewUser ?? false;
       toast({
-        title: "Welcome!",
-        description: "You've successfully signed in with GitHub.",
+        title: isNewUser ? "Welcome!" : "Welcome back!",
+        description: `You've successfully signed in with GitHub.`,
       });
+      return { isNewUser };
     } catch (error: any) {
       toast({
         title: "GitHub sign in failed",

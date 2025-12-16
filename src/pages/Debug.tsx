@@ -19,6 +19,7 @@ const FUNCTIONS_TO_TEST = [
   { name: "database-proxy", requiresAuth: true, body: { action: "select", table: "profiles" } },
   { name: "create-checkout-session", requiresAuth: true, body: { planType: "standard", billingPeriod: "monthly" } },
   { name: "manage-subscription", requiresAuth: true, body: { action: "portal" } },
+  { name: "send-welcome-email", requiresAuth: true, body: {} },
   { name: "ai-chat", requiresAuth: true, body: { messages: [{ role: "user", content: "test" }] } },
 ];
 
