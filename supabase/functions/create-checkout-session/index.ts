@@ -28,10 +28,15 @@ serve(async (req) => {
       throw new Error('Stripe is not configured. Please add STRIPE_SECRET_KEY.');
     }
 
-    // Verify Firebase token
+    // Verify Firebase token (prefer x-client-info; fallback to Authorization)
+    const clientInfo = req.headers.get("x-client-info") ?? "";
+    const firebaseTokenFromClientInfo = clientInfo.startsWith("firebase:")
+      ? clientInfo.slice("firebase:".length)
+      : null;
+
     const authHeader = req.headers.get('Authorization');
-    const tokenResult = await verifyFirebaseToken(authHeader);
-    
+    const tokenResult = await verifyFirebaseToken(firebaseTokenFromClientInfo ?? authHeader);
+
     if (!tokenResult) {
       console.error('Firebase authentication failed');
       throw new Error('User not authenticated');

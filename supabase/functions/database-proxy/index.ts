@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verifyFirebaseToken, unauthorizedResponse } from "../_shared/auth.ts";
+import { authenticateRequest, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,16 +14,14 @@ serve(async (req) => {
   }
 
   try {
-    // Verify Firebase token
-    const authHeader = req.headers.get("Authorization");
-    const tokenResult = await verifyFirebaseToken(authHeader);
-    
-    if (!tokenResult) {
-      console.error("Authentication failed: No valid token");
-      return unauthorizedResponse(corsHeaders, "Authentication required");
+    const auth = await authenticateRequest(req);
+
+    if (auth.error) {
+      console.error("Authentication failed:", auth.error);
+      return unauthorizedResponse(corsHeaders, auth.error);
     }
 
-    const userId = tokenResult.userId;
+    const userId = auth.userId;
     console.log(`Database proxy request from user: ${userId}`);
 
     // Parse request body

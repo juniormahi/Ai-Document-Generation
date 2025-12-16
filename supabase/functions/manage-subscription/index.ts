@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
-import { verifyFirebaseToken } from "../_shared/auth.ts";
+import { authenticateRequest, unauthorizedResponse } from "../_shared/auth.ts";
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') as string, {
   apiVersion: '2023-10-16',
@@ -19,15 +19,13 @@ serve(async (req) => {
   }
 
   try {
-    // Verify Firebase token
-    const authHeader = req.headers.get('Authorization');
-    const tokenResult = await verifyFirebaseToken(authHeader);
-    
-    if (!tokenResult) {
-      throw new Error('User not authenticated');
+    const auth = await authenticateRequest(req);
+
+    if (auth.error) {
+      return unauthorizedResponse(corsHeaders, auth.error);
     }
 
-    const userId = tokenResult.userId;
+    const userId = auth.userId;
     console.log('Managing subscription for user:', userId);
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
