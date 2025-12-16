@@ -20,6 +20,9 @@ const FUNCTIONS_TO_TEST = [
   { name: "create-checkout-session", requiresAuth: true, body: { planType: "standard", billingPeriod: "monthly" } },
   { name: "manage-subscription", requiresAuth: true, body: { action: "portal" } },
   { name: "send-welcome-email", requiresAuth: true, body: {} },
+  { name: "notify-payment-success", requiresAuth: false, body: { userId: "test", planType: "premium", amount: 1200, billingPeriod: "monthly" } },
+  { name: "notify-usage-limit", requiresAuth: false, body: { userId: "test", usageType: "documents", currentUsage: 20, limit: 25 } },
+  { name: "notify-subscription-change", requiresAuth: false, body: { userId: "test", changeType: "upgraded", planType: "premium" } },
   { name: "ai-chat", requiresAuth: true, body: { messages: [{ role: "user", content: "test" }] } },
 ];
 
