@@ -28,6 +28,7 @@ import ChatPDF from "./pages/tools/ChatPDF";
 import WordEditorPage from "./pages/tools/WordEditorPage";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import Debug from "./pages/Debug";
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -72,6 +73,9 @@ function AnimatedRoutes() {
         <Route path="/tools/voiceover" element={<Navigate to="/tools/voice-generator" replace />} />
         <Route path="/tools/pdf-generator" element={<Navigate to="/tools/document-creator" replace />} />
         <Route path="/pricing" element={<Navigate to="/dashboard/subscription" replace />} />
+        
+        {/* Debug */}
+        <Route path="/debug" element={<PageTransition><Debug /></PageTransition>} />
         
         {/* Catch-all */}
         <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
