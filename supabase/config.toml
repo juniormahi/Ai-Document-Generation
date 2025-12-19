@@ -68,3 +68,6 @@ verify_jwt = false
 
 [functions.contact-form]
 verify_jwt = false
+
+[functions.send-reply-email]
+verify_jwt = false

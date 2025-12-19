@@ -5,9 +5,12 @@ import { SEO } from "@/components/SEO";
 import { InteractiveLogo } from "@/components/InteractiveLogo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { 
-  ArrowLeft, Mail, Eye, Trash2, RefreshCw, 
-  MessageSquare, Clock, CheckCircle2, ShieldAlert
+  ArrowLeft, Mail, Trash2, RefreshCw, 
+  MessageSquare, Clock, CheckCircle2, ShieldAlert, Send, Loader2, Reply
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -37,6 +40,10 @@ export default function AdminMessages() {
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
+  const [replyDialogOpen, setReplyDialogOpen] = useState(false);
+  const [replySubject, setReplySubject] = useState("");
+  const [replyMessage, setReplyMessage] = useState("");
+  const [sendingReply, setSendingReply] = useState(false);
 
   // Check admin access
   const isAdmin = user?.email === ADMIN_EMAIL;
@@ -136,6 +143,56 @@ export default function AdminMessages() {
     }
   };
 
+  const openReplyDialog = (message: ContactMessage) => {
+    setSelectedMessage(message);
+    setReplySubject(`Re: ${message.subject}`);
+    setReplyMessage("");
+    setReplyDialogOpen(true);
+  };
+
+  const sendReply = async () => {
+    if (!selectedMessage || !replyMessage.trim()) {
+      toast.error("Please enter a reply message");
+      return;
+    }
+
+    setSendingReply(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-reply-email", {
+        body: {
+          to: selectedMessage.email,
+          subject: replySubject,
+          message: replyMessage,
+          originalMessage: selectedMessage.message,
+          senderName: selectedMessage.name,
+        },
+      });
+
+      if (error) throw error;
+
+      // Update message status to replied
+      await supabase
+        .from("contact_messages")
+        .update({ status: "replied" })
+        .eq("id", selectedMessage.id);
+
+      setMessages(messages.map(m => 
+        m.id === selectedMessage.id ? { ...m, status: "replied" } : m
+      ));
+
+      toast.success("Reply sent successfully!");
+      setReplyDialogOpen(false);
+      setSelectedMessage(null);
+      setReplyMessage("");
+      setReplySubject("");
+    } catch (error: any) {
+      console.error("Error sending reply:", error);
+      toast.error(error.message || "Failed to send reply");
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
   const unreadCount = messages.filter(m => m.status === "unread").length;
 
   return (
@@ -207,7 +264,8 @@ export default function AdminMessages() {
                   transition={{ duration: 0.3, delay: index * 0.05 }}
                   onClick={() => openMessage(message)}
                   className={`bg-card border rounded-xl p-5 cursor-pointer transition-all hover:border-primary/50 ${
-                    message.status === "unread" ? "border-primary/30 bg-primary/5" : "border-border"
+                    message.status === "unread" ? "border-primary/30 bg-primary/5" : 
+                    message.status === "replied" ? "border-green-500/30" : "border-border"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -217,6 +275,9 @@ export default function AdminMessages() {
                         <span className="text-sm text-muted-foreground truncate">&lt;{message.email}&gt;</span>
                         {message.status === "unread" && (
                           <Badge variant="default" className="text-xs">New</Badge>
+                        )}
+                        {message.status === "replied" && (
+                          <Badge variant="secondary" className="text-xs bg-green-500/20 text-green-600">Replied</Badge>
                         )}
                       </div>
                       <h3 className="font-medium mb-1 truncate">{message.subject}</h3>
@@ -280,14 +341,26 @@ export default function AdminMessages() {
                       <span>Read {selectedMessage.read_at && `at ${new Date(selectedMessage.read_at).toLocaleString()}`}</span>
                     </>
                   )}
+                  {selectedMessage.status === "replied" && (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      <span>Replied</span>
+                    </>
+                  )}
                 </div>
                 <div className="flex gap-2">
-                  <a href={`mailto:${selectedMessage.email}?subject=Re: ${selectedMessage.subject}`}>
-                    <Button variant="outline" size="sm" className="gap-2">
-                      <Mail className="h-4 w-4" />
-                      Reply
-                    </Button>
-                  </a>
+                  <Button 
+                    variant="default" 
+                    size="sm" 
+                    className="gap-2"
+                    onClick={() => {
+                      setSelectedMessage(null);
+                      setTimeout(() => openReplyDialog(selectedMessage), 100);
+                    }}
+                  >
+                    <Reply className="h-4 w-4" />
+                    Reply
+                  </Button>
                   <Button 
                     variant="destructive" 
                     size="sm" 
@@ -298,6 +371,80 @@ export default function AdminMessages() {
                     Delete
                   </Button>
                 </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Reply Dialog */}
+      <Dialog open={replyDialogOpen} onOpenChange={(open) => {
+        setReplyDialogOpen(open);
+        if (!open) {
+          setReplyMessage("");
+          setReplySubject("");
+        }
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Reply className="h-5 w-5" />
+              Reply to {selectedMessage?.name}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedMessage && (
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                Replying to: <span className="text-foreground">{selectedMessage.email}</span>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reply-subject">Subject</Label>
+                <Input
+                  id="reply-subject"
+                  value={replySubject}
+                  onChange={(e) => setReplySubject(e.target.value)}
+                  placeholder="Email subject"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reply-message">Message</Label>
+                <Textarea
+                  id="reply-message"
+                  value={replyMessage}
+                  onChange={(e) => setReplyMessage(e.target.value)}
+                  placeholder="Type your reply here..."
+                  rows={6}
+                  className="resize-none"
+                />
+              </div>
+
+              <div className="bg-muted/30 rounded-lg p-3">
+                <p className="text-xs text-muted-foreground mb-2">Original message:</p>
+                <p className="text-sm text-muted-foreground line-clamp-3">{selectedMessage.message}</p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setReplyDialogOpen(false)}
+                  disabled={sendingReply}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={sendReply}
+                  disabled={sendingReply || !replyMessage.trim()}
+                  className="gap-2"
+                >
+                  {sendingReply ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  Send Reply
+                </Button>
               </div>
             </div>
           )}
