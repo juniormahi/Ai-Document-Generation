@@ -1,6 +1,7 @@
 import { 
   FileText, Presentation, Table2, Mic, MessageSquare, LayoutDashboard, 
-  Files, Clock, PenTool, BookOpen, Upload, Settings, CreditCard 
+  Files, Clock, PenTool, BookOpen, Upload, Settings, CreditCard,
+  ImageIcon, Video, FolderOpen
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -37,11 +38,14 @@ const aiTools = [
   { title: "Voice Generator", url: "/tools/voice-generator", icon: Mic },
   { title: "Story Generator", url: "/tools/story-generator", icon: BookOpen },
   { title: "AI Writer", url: "/tools/writer", icon: PenTool },
+  { title: "Image Generator", url: "/tools/image-generator", icon: ImageIcon },
+  { title: "Video Generator", url: "/tools/video-generator", icon: Video },
 ];
 
 const mainItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "All Files", url: "/files", icon: Files },
+  { title: "Gallery", url: "/gallery", icon: FolderOpen },
 ];
 
 const accountItems = [
