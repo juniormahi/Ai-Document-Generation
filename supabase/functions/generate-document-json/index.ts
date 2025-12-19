@@ -119,12 +119,22 @@ You are helping ${isPremium ? 'a premium user who expects detailed, professional
 
     if (mode === 'edit' && currentJson) {
       const contextString = JSON.stringify(currentJson).substring(0, MAX_CONTEXT_LENGTH);
-      userPrompt = `The user wants to modify this existing document:
+      userPrompt = `IMPORTANT: You must apply the user's requested changes to this document.
+
+CURRENT DOCUMENT JSON:
 ${contextString}
 
-USER INSTRUCTION: ${topic}
+USER'S EDIT REQUEST: "${topic}"
 
-Return the COMPLETE UPDATED JSON document with the requested changes applied. Preserve all existing content except what needs to be changed. Output only valid JSON.`;
+INSTRUCTIONS:
+1. Carefully read the user's edit request above
+2. Make the specific changes they asked for to the document
+3. DO NOT return the document unchanged - you MUST apply the edits
+4. Keep all other content that wasn't mentioned in the edit request
+5. Return the COMPLETE updated JSON with changes applied
+6. Output ONLY valid JSON, no explanations
+
+Apply the changes now and return the updated JSON:`;
     } else if (templateName) {
       userPrompt = `Create a professional ${templateName} document.
 ${topic ? `Additional requirements: ${topic}` : ''}

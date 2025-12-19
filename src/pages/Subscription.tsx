@@ -201,10 +201,11 @@ export default function Subscription() {
       description: "Get started with MyDocMaker",
       features: [
         "25 credits/month for documents",
+        "10 AI images/day",
+        "2 AI videos/day",
         "50 credits/month for voice",
         "150 credits/month for other tools",
         "5 documents per day",
-        "5 presentations per day",
         "Basic AI chat",
         "PDF & DOCX export",
         "1000 words per file"
@@ -222,6 +223,8 @@ export default function Subscription() {
       description: "For professionals",
       features: [
         "250 generation credits/month",
+        "50 AI images/day",
+        "10 AI videos/day",
         "Unlimited other tools",
         "Unlimited documents",
         "Unlimited AI chat",
@@ -243,6 +246,8 @@ export default function Subscription() {
       description: "Maximum power",
       features: [
         "500 generation credits/month",
+        "100 AI images/day",
+        "30 AI videos/day",
         "Everything in Standard",
         "Max Intelligence AI",
         "Access to Gemini 3 & Nano Banana",

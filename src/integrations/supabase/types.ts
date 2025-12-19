@@ -251,6 +251,7 @@ export type Database = {
           spreadsheets_generated: number
           updated_at: string
           user_id: string
+          videos_generated: number
           voiceovers_generated: number
         }
         Insert: {
@@ -264,6 +265,7 @@ export type Database = {
           spreadsheets_generated?: number
           updated_at?: string
           user_id: string
+          videos_generated?: number
           voiceovers_generated?: number
         }
         Update: {
@@ -277,6 +279,7 @@ export type Database = {
           spreadsheets_generated?: number
           updated_at?: string
           user_id?: string
+          videos_generated?: number
           voiceovers_generated?: number
         }
         Relationships: []

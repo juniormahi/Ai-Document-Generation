@@ -72,6 +72,9 @@ Instructions:
 - If the document doesn't contain the answer, say so clearly
 - Format your response clearly with proper structure`;
 
+    // Try using the PDF as a data URL image (Gemini can process PDFs via vision)
+    const pdfDataUrl = `data:application/pdf;base64,${pdfContent}`;
+    
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -85,12 +88,11 @@ Instructions:
           { 
             role: "user", 
             content: [
-              { type: "text", text: question },
+              { type: "text", text: `Document name: ${fileName || "document.pdf"}\n\nQuestion: ${question}` },
               { 
-                type: "file", 
-                file: { 
-                  filename: fileName || "document.pdf",
-                  file_data: `data:application/pdf;base64,${pdfContent}`
+                type: "image_url", 
+                image_url: { 
+                  url: pdfDataUrl
                 }
               }
             ]

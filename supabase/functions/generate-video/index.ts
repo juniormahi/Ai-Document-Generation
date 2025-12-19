@@ -46,8 +46,8 @@ serve(async (req) => {
       .eq('date', today)
       .single();
 
-    // Use voiceovers_generated as proxy for video credits (we can add a dedicated column later)
-    const videosGeneratedToday = usageData?.voiceovers_generated || 0;
+    // Use the dedicated videos_generated column
+    const videosGeneratedToday = usageData?.videos_generated || 0;
     const dailyLimit = isPremium 
       ? PREMIUM_DAILY_VIDEO_CREDITS 
       : isStandard 
@@ -143,7 +143,7 @@ serve(async (req) => {
     if (usageData) {
       await supabase
         .from('usage_tracking')
-        .update({ voiceovers_generated: videosGeneratedToday + 1 })
+        .update({ videos_generated: videosGeneratedToday + 1 })
         .eq('user_id', userId)
         .eq('date', today);
     } else {
@@ -152,7 +152,7 @@ serve(async (req) => {
         .insert({
           user_id: userId,
           date: today,
-          voiceovers_generated: 1
+          videos_generated: 1
         });
     }
 

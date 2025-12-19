@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { 
@@ -185,9 +186,15 @@ export default function Index() {
   const [activeTab, setActiveTab] = useState("doc");
   const [prompt, setPrompt] = useState("");
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
   const handleGenerate = () => {
     navigate("/dashboard");
+  };
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/");
   };
 
   return (
@@ -327,14 +334,29 @@ export default function Index() {
             </div>
             
             <div className="flex items-center gap-3">
-              <Link to="/login">
-                <Button variant="ghost" size="sm">Log in</Button>
-              </Link>
-              <Link to="/signup">
-                <Button size="sm" className="bg-primary hover:bg-primary/90">
-                  Sign Up
-                </Button>
-              </Link>
+              {user ? (
+                <>
+                  <Link to="/dashboard">
+                    <Button size="sm" className="bg-primary hover:bg-primary/90">
+                      Go to Dashboard
+                    </Button>
+                  </Link>
+                  <Button variant="ghost" size="sm" onClick={handleLogout}>
+                    Log out
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Link to="/login">
+                    <Button variant="ghost" size="sm">Log in</Button>
+                  </Link>
+                  <Link to="/signup">
+                    <Button size="sm" className="bg-primary hover:bg-primary/90">
+                      Sign Up
+                    </Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>
