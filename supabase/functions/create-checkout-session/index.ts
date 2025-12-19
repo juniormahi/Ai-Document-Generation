@@ -15,7 +15,7 @@ const stripe = new Stripe(stripeSecretKey as string, {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-firebase-token, apikey, content-type',
 };
 
 serve(async (req) => {
@@ -28,14 +28,16 @@ serve(async (req) => {
       throw new Error('Stripe is not configured. Please add STRIPE_SECRET_KEY.');
     }
 
-    // Verify Firebase token (prefer x-client-info; fallback to Authorization)
+    // Verify Firebase token (prefer x-firebase-token; fallback to legacy headers)
+    const firebaseTokenHeader = req.headers.get("x-firebase-token");
+
     const clientInfo = req.headers.get("x-client-info") ?? "";
     const firebaseTokenFromClientInfo = clientInfo.startsWith("firebase:")
       ? clientInfo.slice("firebase:".length)
       : null;
 
     const authHeader = req.headers.get('Authorization');
-    const tokenResult = await verifyFirebaseToken(firebaseTokenFromClientInfo ?? authHeader);
+    const tokenResult = await verifyFirebaseToken(firebaseTokenHeader ?? firebaseTokenFromClientInfo ?? authHeader);
 
     if (!tokenResult) {
       console.error('Firebase authentication failed');

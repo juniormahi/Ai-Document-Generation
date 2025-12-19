@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, x-firebase-token, apikey, content-type",
 };
 
 interface HealthStatus {
@@ -52,12 +52,15 @@ serve(async (req) => {
     }
 
     // Check auth - verify Firebase token if provided
+    const firebaseTokenHeader = req.headers.get("x-firebase-token");
+
     const clientInfo = req.headers.get("x-client-info") ?? "";
-    const firebaseToken = clientInfo.startsWith("firebase:")
+    const firebaseTokenFromClientInfo = clientInfo.startsWith("firebase:")
       ? clientInfo.slice("firebase:".length)
       : null;
+
     const authHeader = req.headers.get("Authorization");
-    const token = firebaseToken ?? (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null);
+    const token = firebaseTokenHeader ?? firebaseTokenFromClientInfo ?? (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : authHeader);
 
     if (token) {
       try {

@@ -3,7 +3,7 @@ import { authenticateRequest, unauthorizedResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, x-firebase-token, apikey, content-type",
 };
 
 const MAX_TOPIC_LENGTH = 2000;

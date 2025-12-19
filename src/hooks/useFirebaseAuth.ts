@@ -30,9 +30,8 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
     throw new Error("Please sign in to continue");
   }
 
-  // Important: do not override Authorization (platform JWT verification).
-  // We tunnel the Firebase ID token through an allowed header.
+  // Use a dedicated header to avoid collisions with the Supabase client's own x-client-info.
   return {
-    "x-client-info": `firebase:${token}`,
+    "x-firebase-token": token,
   };
 }

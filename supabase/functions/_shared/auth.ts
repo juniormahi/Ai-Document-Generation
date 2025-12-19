@@ -103,15 +103,20 @@ export async function getUserPremiumStatus(userId: string): Promise<boolean> {
  * Complete authentication flow: verify token and get premium status
  */
 export async function authenticateRequest(req: Request): Promise<AuthResult> {
+  // Prefer a dedicated header set by the web app.
+  const firebaseTokenHeader = req.headers.get("x-firebase-token");
+
+  // Backward compatibility: some older clients tunneled the token through x-client-info.
   const clientInfo = req.headers.get("x-client-info") ?? "";
   const firebaseTokenFromClientInfo = clientInfo.startsWith("firebase:")
     ? clientInfo.slice("firebase:".length)
     : null;
 
+  // Legacy fallback: token in Authorization header.
   const authHeader = req.headers.get("Authorization");
 
-  // Prefer Firebase token tunneled through x-client-info; fallback to Authorization for legacy clients.
-  const tokenResult = await verifyFirebaseToken(firebaseTokenFromClientInfo ?? authHeader);
+  const tokenCandidate = firebaseTokenHeader ?? firebaseTokenFromClientInfo ?? authHeader;
+  const tokenResult = await verifyFirebaseToken(tokenCandidate);
 
   if (!tokenResult) {
     return {
@@ -120,12 +125,12 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
       error: "Authentication required. Please sign in to continue.",
     };
   }
-  
+
   // Get premium status from database
   const isPremium = await getUserPremiumStatus(tokenResult.userId);
-  
+
   console.log(`Authenticated user ${tokenResult.userId} (premium: ${isPremium})`);
-  
+
   return {
     userId: tokenResult.userId,
     isPremium,

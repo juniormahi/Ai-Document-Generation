@@ -12,9 +12,9 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   }
 
   const token = await user.getIdToken();
-  // Do NOT override Authorization (platform JWT verification). See _shared/auth.ts.
+  // Use a dedicated header to avoid collisions with the Supabase client's own x-client-info.
   return {
-    "x-client-info": `firebase:${token}`,
+    "x-firebase-token": token,
   };
 }
 
