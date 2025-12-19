@@ -2,6 +2,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const FIREBASE_PROJECT_ID = "document-gen-ai";
 
+type UserTier = "free" | "standard" | "premium";
+
 interface FirebaseDecodedToken {
   user_id: string;
   email?: string;
@@ -13,6 +15,8 @@ interface FirebaseDecodedToken {
 interface AuthResult {
   userId: string;
   isPremium: boolean;
+  isStandard: boolean;
+  tier: UserTier;
   error?: string;
 }
 
@@ -72,9 +76,9 @@ export async function verifyFirebaseToken(tokenOrHeader: string | null): Promise
 }
 
 /**
- * Get user premium status from Supabase database
+ * Get user tier from Supabase database
  */
-export async function getUserPremiumStatus(userId: string): Promise<boolean> {
+export async function getUserTier(userId: string): Promise<UserTier> {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -89,18 +93,27 @@ export async function getUserPremiumStatus(userId: string): Promise<boolean> {
     
     if (error) {
       console.log("Could not fetch user role, defaulting to free:", error.message);
-      return false;
+      return "free";
     }
     
-    return data?.role === "premium";
+    const role = data?.role as UserTier;
+    return role === "premium" || role === "standard" ? role : "free";
   } catch (error) {
-    console.error("Error checking premium status:", error);
-    return false;
+    console.error("Error checking user tier:", error);
+    return "free";
   }
 }
 
 /**
- * Complete authentication flow: verify token and get premium status
+ * Get user premium status from Supabase database (legacy compatibility)
+ */
+export async function getUserPremiumStatus(userId: string): Promise<boolean> {
+  const tier = await getUserTier(userId);
+  return tier === "premium";
+}
+
+/**
+ * Complete authentication flow: verify token and get tier
  */
 export async function authenticateRequest(req: Request): Promise<AuthResult> {
   // Prefer a dedicated header set by the web app.
@@ -122,18 +135,24 @@ export async function authenticateRequest(req: Request): Promise<AuthResult> {
     return {
       userId: "",
       isPremium: false,
+      isStandard: false,
+      tier: "free",
       error: "Authentication required. Please sign in to continue.",
     };
   }
 
-  // Get premium status from database
-  const isPremium = await getUserPremiumStatus(tokenResult.userId);
+  // Get user tier from database
+  const tier = await getUserTier(tokenResult.userId);
+  const isPremium = tier === "premium";
+  const isStandard = tier === "standard";
 
-  console.log(`Authenticated user ${tokenResult.userId} (premium: ${isPremium})`);
+  console.log(`Authenticated user ${tokenResult.userId} (tier: ${tier})`);
 
   return {
     userId: tokenResult.userId,
     isPremium,
+    isStandard,
+    tier,
   };
 }
 

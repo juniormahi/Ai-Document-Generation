@@ -7,9 +7,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, x-firebase-token, apikey, content-type",
 };
 
-// Daily credit limits
+// Daily credit limits by tier
 const FREE_DAILY_IMAGE_CREDITS = 10;
-const PRO_DAILY_IMAGE_CREDITS = 100;
+const STANDARD_DAILY_IMAGE_CREDITS = 50;
+const PREMIUM_DAILY_IMAGE_CREDITS = 100;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -24,7 +25,7 @@ serve(async (req) => {
       return unauthorizedResponse(corsHeaders, auth.error);
     }
 
-    const { userId, isPremium } = auth;
+    const { userId, isPremium, isStandard, tier } = auth;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -46,13 +47,22 @@ serve(async (req) => {
       .single();
 
     const imagesGeneratedToday = usageData?.images_generated || 0;
-    const dailyLimit = isPremium ? PRO_DAILY_IMAGE_CREDITS : FREE_DAILY_IMAGE_CREDITS;
+    const dailyLimit = isPremium 
+      ? PREMIUM_DAILY_IMAGE_CREDITS 
+      : isStandard 
+        ? STANDARD_DAILY_IMAGE_CREDITS 
+        : FREE_DAILY_IMAGE_CREDITS;
 
     if (imagesGeneratedToday >= dailyLimit) {
+      const upgradeMsg = tier === 'free' 
+        ? 'Upgrade to Standard for 50 daily credits or Premium for 100!' 
+        : tier === 'standard'
+          ? 'Upgrade to Premium for 100 daily credits!'
+          : 'Credits reset tomorrow.';
       return new Response(
         JSON.stringify({ 
           error: "Daily credit limit reached", 
-          message: `You've used all ${dailyLimit} image credits for today. ${!isPremium ? 'Upgrade to Pro for 100 daily credits!' : 'Credits reset tomorrow.'}`,
+          message: `You've used all ${dailyLimit} image credits for today. ${upgradeMsg}`,
           creditsUsed: imagesGeneratedToday,
           creditLimit: dailyLimit
         }),

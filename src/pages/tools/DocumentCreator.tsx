@@ -579,15 +579,17 @@ Response preferences:
           showExample={!topic}
         />
 
-        {/* Insight Card */}
-        <div className="mt-6">
-          <InsightCard
-            title="Introducing our Premium Plans"
-            description="Get higher quality AI generation and faster processing times. Start 7-day free trial now. Cancel anytime."
-            actionText="Enable"
-            actionLink="/dashboard/subscription"
-          />
-        </div>
+        {/* Insight Card - only show for non-premium users */}
+        {!isPremium && (
+          <div className="mt-6">
+            <InsightCard
+              title="Introducing our Premium Plans"
+              description="Get higher quality AI generation and faster processing times. Start 7-day free trial now. Cancel anytime."
+              actionText="Enable"
+              actionLink="/dashboard/subscription"
+            />
+          </div>
+        )}
 
         {/* Tool Suggestion Cards */}
         <ToolSuggestionCards excludeLinks={["/tools/document-creator"]} />

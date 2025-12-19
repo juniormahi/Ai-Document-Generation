@@ -7,9 +7,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, x-firebase-token, apikey, content-type",
 };
 
-// Daily credit limits for video
+// Daily credit limits for video by tier
 const FREE_DAILY_VIDEO_CREDITS = 2;
-const PRO_DAILY_VIDEO_CREDITS = 20;
+const STANDARD_DAILY_VIDEO_CREDITS = 10;
+const PREMIUM_DAILY_VIDEO_CREDITS = 30;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -24,7 +25,7 @@ serve(async (req) => {
       return unauthorizedResponse(corsHeaders, auth.error);
     }
 
-    const { userId, isPremium } = auth;
+    const { userId, isPremium, isStandard, tier } = auth;
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -47,13 +48,22 @@ serve(async (req) => {
 
     // Use voiceovers_generated as proxy for video credits (we can add a dedicated column later)
     const videosGeneratedToday = usageData?.voiceovers_generated || 0;
-    const dailyLimit = isPremium ? PRO_DAILY_VIDEO_CREDITS : FREE_DAILY_VIDEO_CREDITS;
+    const dailyLimit = isPremium 
+      ? PREMIUM_DAILY_VIDEO_CREDITS 
+      : isStandard 
+        ? STANDARD_DAILY_VIDEO_CREDITS 
+        : FREE_DAILY_VIDEO_CREDITS;
 
     if (videosGeneratedToday >= dailyLimit) {
+      const upgradeMsg = tier === 'free' 
+        ? 'Upgrade to Standard for 10 daily credits or Premium for 30!' 
+        : tier === 'standard'
+          ? 'Upgrade to Premium for 30 daily credits!'
+          : 'Credits reset tomorrow.';
       return new Response(
         JSON.stringify({ 
           error: "Daily credit limit reached", 
-          message: `You've used all ${dailyLimit} video credits for today. ${!isPremium ? 'Upgrade to Pro for 20 daily credits!' : 'Credits reset tomorrow.'}`,
+          message: `You've used all ${dailyLimit} video credits for today. ${upgradeMsg}`,
           creditsUsed: videosGeneratedToday,
           creditLimit: dailyLimit
         }),

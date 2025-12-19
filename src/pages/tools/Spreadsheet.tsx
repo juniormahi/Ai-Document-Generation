@@ -17,7 +17,7 @@ import { DashboardLayout } from "@/components/DashboardLayout";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAuthHeaders } from "@/hooks/useFirebaseAuth";
 import { SEO } from "@/components/SEO";
-import { fileHistoryDb } from "@/lib/databaseProxy";
+import { fileHistoryDb, userRolesDb } from "@/lib/databaseProxy";
 import { ToolHero, PromptInput, InsightCard, ToolSuggestionCards } from "@/components/tools";
 import { DocumentAssistantChat } from "@/components/tools/DocumentAssistantChat";
 import type { ChatSettings } from "@/components/tools/ChatSettingsPanel";
@@ -25,6 +25,7 @@ import { motion } from "framer-motion";
 import { SEOArticle } from "@/components/seo/SEOArticle";
 import { aiSpreadsheetGeneratorArticle } from "@/data/toolSEOArticles";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { useEffect } from "react";
 
 export default function Spreadsheet() {
   const { user, loading: authLoading } = useAuth();
@@ -33,7 +34,17 @@ export default function Spreadsheet() {
   const [generatedContent, setGeneratedContent] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState<string[][]>([]);
+  const [isPremium, setIsPremium] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const checkPremiumStatus = async () => {
+      if (!user?.uid) return;
+      const isPremiumUser = await userRolesDb.isPremium();
+      setIsPremium(isPremiumUser);
+    };
+    checkPremiumStatus();
+  }, [user?.uid]);
 
   if (authLoading) {
     return (
@@ -369,15 +380,17 @@ Response preferences:
           showExample={!description}
         />
 
-        {/* Insight Card */}
-        <div className="mt-6">
-          <InsightCard
-            title="Introducing our Premium Plans"
-            description="Get higher quality AI generation and faster processing times. Start 7-day free trial now. Cancel anytime."
-            actionText="Enable"
-            actionLink="/dashboard/subscription"
-          />
-        </div>
+        {/* Insight Card - only show for non-premium users */}
+        {!isPremium && (
+          <div className="mt-6">
+            <InsightCard
+              title="Introducing our Premium Plans"
+              description="Get higher quality AI generation and faster processing times. Start 7-day free trial now. Cancel anytime."
+              actionText="Enable"
+              actionLink="/dashboard/subscription"
+            />
+          </div>
+        )}
 
         {/* Tool Suggestion Cards */}
         <ToolSuggestionCards excludeLinks={["/tools/spreadsheet-maker"]} />
