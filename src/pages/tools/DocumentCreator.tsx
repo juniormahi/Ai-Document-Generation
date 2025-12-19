@@ -499,6 +499,7 @@ Response preferences:
                 <DocumentJsonPreview 
                   schema={documentSchema} 
                   processingImages={processingImages}
+                  onSchemaChange={(newSchema) => setDocumentSchema(newSchema)}
                 />
               </div>
             </ResizablePanel>

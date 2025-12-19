@@ -46,16 +46,31 @@ export default function VideoGenerator() {
       }
       
       try {
-        const { data } = await supabase
-          .from('subscriptions')
-          .select('status')
+        // Check user role for tier
+        const { data: roleData } = await supabase
+          .from('user_roles')
+          .select('role')
           .eq('user_id', user.uid)
-          .eq('status', 'active')
           .maybeSingle();
         
-        const premium = !!data;
+        const role = roleData?.role || 'free';
+        const premium = role === 'premium';
+        const standard = role === 'standard';
         setIsPremium(premium);
-        setCreditLimit(premium ? 30 : 2);
+        
+        // Set limits based on tier: Free=2, Standard=10, Premium=30
+        setCreditLimit(premium ? 30 : standard ? 10 : 2);
+
+        // Check today's usage
+        const today = new Date().toISOString().split('T')[0];
+        const { data: usageData } = await supabase
+          .from('usage_tracking')
+          .select('videos_generated')
+          .eq('user_id', user.uid)
+          .eq('date', today)
+          .single();
+
+        setCreditsUsed(usageData?.videos_generated || 0);
       } catch (error) {
         console.error('Error checking status:', error);
       } finally {
@@ -187,30 +202,39 @@ export default function VideoGenerator() {
         </motion.div>
 
         {/* Credits Display */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
-          <Card className="max-w-md mx-auto">
-            <CardContent className="pt-4 pb-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Monthly Credits</span>
-                <span className="text-sm text-muted-foreground">
-                  {creditsUsed} / {creditLimit} used
-                </span>
-              </div>
-              <Progress value={(creditsUsed / creditLimit) * 100} className="h-2" />
-              {!isPremium && (
-                <p className="text-xs text-muted-foreground mt-2 text-center">
-                  <a href="/dashboard/subscription" className="text-primary hover:underline">
-                    Upgrade to Pro for 30 credits/month
-                  </a>
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </motion.div>
+        {user && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <Card className="max-w-md mx-auto">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-yellow-500" />
+                    Daily Video Credits
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {creditsUsed} / {creditLimit} used
+                  </span>
+                </div>
+                <Progress value={(creditsUsed / creditLimit) * 100} className="h-2" />
+                <div className="flex justify-between items-center mt-2">
+                  <p className="text-xs text-muted-foreground">
+                    {creditLimit - creditsUsed} credits remaining today
+                  </p>
+                  {!isPremium && (
+                    <a href="/dashboard/subscription" className="text-xs text-primary hover:underline flex items-center gap-1">
+                      <span className="w-3 h-3">👑</span>
+                      Upgrade for more
+                    </a>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         <div className="grid lg:grid-cols-2 gap-6">
           {/* Input Section */}
