@@ -50,14 +50,11 @@ export function useTierCredits(category: ToolCategory): UseTierCreditsResult {
     }
 
     try {
-      // Get user role
+      // Get user role using security definer function to bypass RLS
       const { data: roleData } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.uid)
-        .maybeSingle();
+        .rpc('get_user_role', { _user_id: user.uid });
 
-      const userTier = (roleData?.role as UserTier) || 'free';
+      const userTier = (roleData as UserTier) || 'free';
       setTier(userTier);
 
       // Get today's usage
