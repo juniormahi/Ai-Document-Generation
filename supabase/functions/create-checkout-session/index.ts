@@ -1,21 +1,24 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
 import { verifyFirebaseToken } from "../_shared/auth.ts";
 
-const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
-if (!stripeSecretKey) {
-  console.error('STRIPE_SECRET_KEY is not set');
-}
-
-const stripe = new Stripe(stripeSecretKey as string, {
-  apiVersion: '2023-10-16',
-  httpClient: Stripe.createFetchHttpClient(),
-});
+const lemonSqueezyApiKey = Deno.env.get('LEMONSQUEEZY_API_KEY');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, x-firebase-token, apikey, content-type',
+};
+
+// LemonSqueezy product/variant IDs - replace these with your actual IDs from LemonSqueezy
+const PRODUCT_VARIANTS = {
+  standard: {
+    monthly: '123456', // Replace with actual variant ID
+    annually: '123457', // Replace with actual variant ID
+  },
+  premium: {
+    monthly: '123458', // Replace with actual variant ID
+    annually: '123459', // Replace with actual variant ID
+  },
 };
 
 serve(async (req) => {
@@ -24,18 +27,16 @@ serve(async (req) => {
   }
 
   try {
-    if (!stripeSecretKey) {
-      throw new Error('Stripe is not configured. Please add STRIPE_SECRET_KEY.');
+    if (!lemonSqueezyApiKey) {
+      throw new Error('LemonSqueezy is not configured. Please add LEMONSQUEEZY_API_KEY.');
     }
 
-    // Verify Firebase token (prefer x-firebase-token; fallback to legacy headers)
+    // Verify Firebase token
     const firebaseTokenHeader = req.headers.get("x-firebase-token");
-
     const clientInfo = req.headers.get("x-client-info") ?? "";
     const firebaseTokenFromClientInfo = clientInfo.startsWith("firebase:")
       ? clientInfo.slice("firebase:".length)
       : null;
-
     const authHeader = req.headers.get('Authorization');
     const tokenResult = await verifyFirebaseToken(firebaseTokenHeader ?? firebaseTokenFromClientInfo ?? authHeader);
 
@@ -46,11 +47,7 @@ serve(async (req) => {
 
     const userId = tokenResult.userId;
     const userEmail = tokenResult.email;
-    console.log('Creating checkout for Firebase user:', userId);
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    console.log('Creating LemonSqueezy checkout for user:', userId);
 
     const { planType, billingPeriod } = await req.json();
     console.log('Creating checkout session:', { planType, billingPeriod, userId });
@@ -59,94 +56,90 @@ serve(async (req) => {
       throw new Error('Missing required fields: planType and billingPeriod');
     }
 
-    // Define pricing (in cents)
-    const prices: Record<string, Record<string, number>> = {
-      standard: {
-        monthly: 900,
-        annually: 8400,
-      },
-      premium: {
-        monthly: 1200,
-        annually: 12000,
-      },
-    };
-
-    const planPrices = prices[planType as keyof typeof prices];
-    if (!planPrices) {
+    // Get the variant ID
+    const variants = PRODUCT_VARIANTS[planType as keyof typeof PRODUCT_VARIANTS];
+    if (!variants) {
       throw new Error(`Invalid plan type: ${planType}`);
     }
 
-    const amount = planPrices[billingPeriod as 'monthly' | 'annually'];
-    if (!amount) {
+    const variantId = variants[billingPeriod as 'monthly' | 'annually'];
+    if (!variantId) {
       throw new Error(`Invalid billing period: ${billingPeriod}`);
     }
 
-    // Get or create customer
-    const { data: existingSubscription } = await supabase
-      .from('subscriptions')
-      .select('stripe_customer_id')
-      .eq('user_id', userId)
-      .maybeSingle();
+    const origin = req.headers.get('origin') || 'https://mydocmaker.com';
 
-    let customerId = existingSubscription?.stripe_customer_id;
-
-    if (!customerId) {
-      const existingCustomers = await stripe.customers.list({
-        email: userEmail,
-        limit: 1,
-      });
-
-      if (existingCustomers.data.length > 0) {
-        customerId = existingCustomers.data[0].id;
-        console.log('Found existing Stripe customer:', customerId);
-      } else {
-        const customer = await stripe.customers.create({
-          email: userEmail,
-          metadata: { user_id: userId },
-        });
-        customerId = customer.id;
-        console.log('Created new Stripe customer:', customerId);
-      }
-    }
-
-    const idempotencyKey = `checkout_${userId}_${planType}_${billingPeriod}_${Date.now()}`;
-
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      client_reference_id: userId,
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `MyDocMaker ${planType.charAt(0).toUpperCase() + planType.slice(1)} Plan`,
-              description: `${billingPeriod === 'monthly' ? 'Monthly' : 'Annual'} subscription`,
+    // Create LemonSqueezy checkout
+    const response = await fetch('https://api.lemonsqueezy.com/v1/checkouts', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${lemonSqueezyApiKey}`,
+        'Content-Type': 'application/vnd.api+json',
+        'Accept': 'application/vnd.api+json',
+      },
+      body: JSON.stringify({
+        data: {
+          type: 'checkouts',
+          attributes: {
+            checkout_data: {
+              email: userEmail,
+              custom: {
+                user_id: userId,
+                plan_type: planType,
+                billing_period: billingPeriod,
+              },
             },
-            unit_amount: amount,
-            recurring: {
-              interval: billingPeriod === 'monthly' ? 'month' : 'year',
+            checkout_options: {
+              embed: false,
+              media: true,
+              logo: true,
+              desc: true,
+              discount: true,
+              subscription_preview: true,
+            },
+            product_options: {
+              enabled_variants: [parseInt(variantId)],
+              redirect_url: `${origin}/dashboard?success=true`,
+              receipt_link_url: `${origin}/dashboard`,
+              receipt_button_text: 'Go to Dashboard',
+              receipt_thank_you_note: 'Thank you for subscribing to MyDocMaker!',
             },
           },
-          quantity: 1,
+          relationships: {
+            store: {
+              data: {
+                type: 'stores',
+                id: '12345', // Replace with your LemonSqueezy store ID
+              },
+            },
+            variant: {
+              data: {
+                type: 'variants',
+                id: variantId,
+              },
+            },
+          },
         },
-      ],
-      mode: 'subscription',
-      success_url: `${req.headers.get('origin')}/dashboard?success=true&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${req.headers.get('origin')}/dashboard/subscription?canceled=true`,
-      subscription_data: {
-        trial_period_days: 7,
-        metadata: { user_id: userId, plan_type: planType, billing_period: billingPeriod },
-      },
-      metadata: { user_id: userId, plan_type: planType, billing_period: billingPeriod },
-      allow_promotion_codes: true,
-      billing_address_collection: 'auto',
-    }, { idempotencyKey });
+      }),
+    });
 
-    console.log('Checkout session created:', session.id);
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('LemonSqueezy API error:', errorData);
+      throw new Error('Failed to create checkout session');
+    }
+
+    const checkoutData = await response.json();
+    const checkoutUrl = checkoutData.data?.attributes?.url;
+
+    if (!checkoutUrl) {
+      throw new Error('No checkout URL returned');
+    }
+
+    console.log('LemonSqueezy checkout created:', checkoutData.data?.id);
 
     return new Response(
-      JSON.stringify({ url: session.url, sessionId: session.id }),
+      JSON.stringify({ url: checkoutUrl, sessionId: checkoutData.data?.id }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   } catch (error: any) {
