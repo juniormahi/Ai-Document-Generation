@@ -44,6 +44,7 @@ import Gallery from "./pages/Gallery";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Debug from "./pages/Debug";
+import CreditsOverview from "./pages/CreditsOverview";
 
 function AnimatedRoutes() {
   const location = useLocation();
@@ -82,6 +83,7 @@ function AnimatedRoutes() {
         <Route path="/profile" element={<PageTransition><Profile /></PageTransition>} />
         <Route path="/settings" element={<PageTransition><Settings /></PageTransition>} />
         <Route path="/dashboard/subscription" element={<PageTransition><Subscription /></PageTransition>} />
+        <Route path="/dashboard/credits" element={<PageTransition><CreditsOverview /></PageTransition>} />
         <Route path="/tools" element={<PageTransition><Tools /></PageTransition>} />
         <Route path="/gallery" element={<PageTransition><Gallery /></PageTransition>} />
         {/* Tools */}

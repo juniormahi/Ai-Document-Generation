@@ -34,6 +34,7 @@ interface UseTierCreditsResult {
   loading: boolean;
   refetch: () => Promise<void>;
   getUpgradeMessage: () => string;
+  checkAndNotify: (newUsage: number) => Promise<void>;
 }
 
 export function useTierCredits(category: ToolCategory): UseTierCreditsResult {
@@ -42,7 +43,7 @@ export function useTierCredits(category: ToolCategory): UseTierCreditsResult {
   const [creditsUsed, setCreditsUsed] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const fetchCredits = async () => {
+  const fetchCredits = async (checkNotification = false) => {
     if (!user?.uid) {
       setLoading(false);
       return;
@@ -68,7 +69,28 @@ export function useTierCredits(category: ToolCategory): UseTierCreditsResult {
         .eq('date', today)
         .maybeSingle();
 
-      setCreditsUsed(usageData?.[category] || 0);
+      const newUsage = usageData?.[category] || 0;
+      const prevUsage = creditsUsed;
+      setCreditsUsed(newUsage);
+
+      // Check if we should send 80% notification
+      if (checkNotification && newUsage > prevUsage && user.email) {
+        const limit = TIER_LIMITS[category][userTier];
+        if (limit > 0 && limit !== 999) {
+          const threshold80 = Math.floor(limit * 0.8);
+          if (newUsage === threshold80) {
+            // Send notification in background
+            supabase.functions.invoke('notify-credit-limit', {
+              body: {
+                userId: user.uid,
+                email: user.email,
+                category,
+                currentUsage: newUsage,
+              },
+            }).catch(err => console.error('Notification error:', err));
+          }
+        }
+      }
     } catch (error) {
       console.error('Error fetching tier credits:', error);
     } finally {
@@ -77,7 +99,7 @@ export function useTierCredits(category: ToolCategory): UseTierCreditsResult {
   };
 
   useEffect(() => {
-    fetchCredits();
+    fetchCredits(false); // Initial fetch without notification check
   }, [user?.uid, category]);
 
   const creditLimit = TIER_LIMITS[category][tier];
@@ -97,6 +119,33 @@ export function useTierCredits(category: ToolCategory): UseTierCreditsResult {
     return '';
   };
 
+  // Check if usage hit 80% threshold and send notification
+  const checkAndNotify = async (newUsage: number) => {
+    if (!user?.uid || !user?.email) return;
+    
+    const limit = TIER_LIMITS[category][tier];
+    if (limit === 0 || limit === 999) return; // Skip unlimited
+    
+    const threshold80 = Math.floor(limit * 0.8);
+    
+    // Only notify when exactly hitting 80%
+    if (newUsage === threshold80) {
+      try {
+        await supabase.functions.invoke('notify-credit-limit', {
+          body: {
+            userId: user.uid,
+            email: user.email,
+            category,
+            currentUsage: newUsage,
+          },
+        });
+        console.log('80% credit notification sent for', category);
+      } catch (error) {
+        console.error('Failed to send credit notification:', error);
+      }
+    }
+  };
+
   return {
     tier,
     isPremium,
@@ -105,8 +154,9 @@ export function useTierCredits(category: ToolCategory): UseTierCreditsResult {
     creditsUsed,
     creditsRemaining,
     loading,
-    refetch: fetchCredits,
+    refetch: () => fetchCredits(true), // Refetch with notification check
     getUpgradeMessage,
+    checkAndNotify,
   };
 }
 

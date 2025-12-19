@@ -1,7 +1,7 @@
 import { 
   FileText, Presentation, Table2, Mic, MessageSquare, LayoutDashboard, 
   Files, Clock, PenTool, BookOpen, Upload, Settings, CreditCard,
-  ImageIcon, Video, FolderOpen
+  ImageIcon, Video, FolderOpen, Zap
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -49,8 +49,9 @@ const mainItems = [
 ];
 
 const accountItems = [
-  { title: "Settings", url: "/settings", icon: Settings },
+  { title: "Credits", url: "/dashboard/credits", icon: Zap },
   { title: "Subscription", url: "/dashboard/subscription", icon: CreditCard },
+  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 interface RecentFile {

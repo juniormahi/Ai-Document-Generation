@@ -80,3 +80,6 @@ verify_jwt = false
 
 [functions.notify-trial-ending]
 verify_jwt = false
+
+[functions.notify-credit-limit]
+verify_jwt = false
