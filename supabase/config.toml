@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.send-login-notification]
 verify_jwt = false
+
+[functions.notify-trial-ending]
+verify_jwt = false
