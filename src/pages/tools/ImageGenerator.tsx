@@ -23,7 +23,9 @@ import {
   Grid3X3,
   Edit,
   Library,
-  Zap
+  Zap,
+  Upload,
+  X
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -73,6 +75,8 @@ export default function ImageGenerator() {
   const [editPrompt, setEditPrompt] = useState("");
   const [editedImage, setEditedImage] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [uploadedPreview, setUploadedPreview] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   
   const { toast } = useToast();
   const { user } = useAuth();
@@ -272,6 +276,59 @@ export default function ImageGenerator() {
       title: "Prompt Loaded",
       description: "You can now generate images with this prompt.",
     });
+  };
+
+  const handleFileUpload = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid file",
+        description: "Please upload an image file (PNG, JPG, WEBP, etc.)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please upload an image smaller than 10MB",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string;
+      setEditImageUrl(base64);
+      setUploadedPreview(base64);
+      toast({
+        title: "Image uploaded",
+        description: "You can now edit this image with AI.",
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileUpload(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const clearUploadedImage = () => {
+    setEditImageUrl("");
+    setUploadedPreview(null);
   };
 
   if (checkingStatus) {
@@ -567,15 +624,75 @@ export default function ImageGenerator() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {/* Image Upload Section */}
                       <div>
                         <label className="text-sm font-medium mb-2 block">
-                          Image URL or base64
+                          Upload or paste image
+                        </label>
+                        
+                        {uploadedPreview ? (
+                          <div className="relative rounded-lg overflow-hidden border bg-muted/50">
+                            <img 
+                              src={uploadedPreview} 
+                              alt="Uploaded preview" 
+                              className="w-full h-40 object-contain"
+                            />
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="absolute top-2 right-2"
+                              onClick={clearUploadedImage}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div
+                            onDrop={handleDrop}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
+                              isDragging 
+                                ? 'border-primary bg-primary/10' 
+                                : 'border-muted-foreground/30 hover:border-primary/50'
+                            }`}
+                            onClick={() => document.getElementById('image-upload')?.click()}
+                          >
+                            <input
+                              type="file"
+                              id="image-upload"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleFileUpload(file);
+                              }}
+                            />
+                            <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                            <p className="text-sm text-muted-foreground">
+                              <span className="font-medium text-foreground">Click to upload</span> or drag and drop
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              PNG, JPG, WEBP up to 10MB
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* URL Input as alternative */}
+                      <div>
+                        <label className="text-sm font-medium mb-2 block text-muted-foreground">
+                          Or paste image URL
                         </label>
                         <Textarea
-                          value={editImageUrl}
-                          onChange={(e) => setEditImageUrl(e.target.value)}
-                          placeholder="Paste an image URL or data:image/... base64 string"
-                          className="min-h-[80px] resize-none"
+                          value={editImageUrl.startsWith('data:') ? '' : editImageUrl}
+                          onChange={(e) => {
+                            setEditImageUrl(e.target.value);
+                            setUploadedPreview(e.target.value.startsWith('http') ? e.target.value : null);
+                          }}
+                          placeholder="https://example.com/image.jpg"
+                          className="min-h-[60px] resize-none text-sm"
+                          disabled={!!uploadedPreview}
                         />
                       </div>
 
