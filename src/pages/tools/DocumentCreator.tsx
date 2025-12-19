@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 import { 
   Loader2, FileText, Crown, Sparkles, Download, 
   Palette, LayoutTemplate, MessageSquare,
-  Send
+  Send, Edit
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { buildDocxFromSchema } from "@/lib/documentBuilder";
@@ -17,7 +17,7 @@ import { checkRateLimit } from "@/lib/rateLimiter";
 import { getAuthHeaders } from "@/hooks/useFirebaseAuth";
 import { fileHistoryDb, userRolesDb, usageTrackingDb } from "@/lib/databaseProxy";
 import { SEO } from "@/components/SEO";
-import { DOCUMENT_THEMES, DOCUMENT_TEMPLATES, type DocumentSchema } from "@/lib/documentSchema";
+import { DOCUMENT_THEMES, DOCUMENT_TEMPLATES, type DocumentSchema, type AnyDocumentElement } from "@/lib/documentSchema";
 import { processDocumentImages, hasUnprocessedImages } from "@/lib/imageProcessor";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -47,6 +47,85 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 
+// Convert DocumentSchema to HTML for editing
+function documentSchemaToHtml(schema: DocumentSchema): string {
+  const htmlParts: string[] = [];
+  
+  for (const section of schema.sections) {
+    for (const element of section.elements) {
+      switch (element.type) {
+        case 'heading1':
+          htmlParts.push(`<h1>${escapeHtml((element as any).text)}</h1>`);
+          break;
+        case 'heading2':
+          htmlParts.push(`<h2>${escapeHtml((element as any).text)}</h2>`);
+          break;
+        case 'heading3':
+          htmlParts.push(`<h3>${escapeHtml((element as any).text)}</h3>`);
+          break;
+        case 'heading4':
+          htmlParts.push(`<h4>${escapeHtml((element as any).text)}</h4>`);
+          break;
+        case 'paragraph':
+          const paraEl = element as any;
+          if (paraEl.text_runs) {
+            const runsHtml = paraEl.text_runs.map((run: any) => {
+              let text = escapeHtml(run.text);
+              if (run.bold) text = `<strong>${text}</strong>`;
+              if (run.italic) text = `<em>${text}</em>`;
+              if (run.underline) text = `<u>${text}</u>`;
+              return text;
+            }).join('');
+            htmlParts.push(`<p>${runsHtml}</p>`);
+          } else {
+            htmlParts.push(`<p>${escapeHtml(paraEl.text || '')}</p>`);
+          }
+          break;
+        case 'bullet_list':
+          const bullets = (element as any).items.map((item: string) => `<li>${escapeHtml(item)}</li>`).join('');
+          htmlParts.push(`<ul>${bullets}</ul>`);
+          break;
+        case 'numbered_list':
+          const numbered = (element as any).items.map((item: string) => `<li>${escapeHtml(item)}</li>`).join('');
+          htmlParts.push(`<ol>${numbered}</ol>`);
+          break;
+        case 'table':
+          const tableEl = element as any;
+          let tableHtml = '<table><tbody>';
+          for (let i = 0; i < tableEl.rows.length; i++) {
+            const row = tableEl.rows[i];
+            const tag = i === 0 || row.isHeader ? 'th' : 'td';
+            const cells = row.cells.map((cell: string) => `<${tag}>${escapeHtml(cell)}</${tag}>`).join('');
+            tableHtml += `<tr>${cells}</tr>`;
+          }
+          tableHtml += '</tbody></table>';
+          htmlParts.push(tableHtml);
+          break;
+        case 'image':
+          const imgEl = element as any;
+          if (imgEl.url) {
+            htmlParts.push(`<p><img src="${imgEl.url}" alt="${escapeHtml(imgEl.caption || '')}" /></p>`);
+          }
+          break;
+        case 'divider':
+          htmlParts.push('<hr />');
+          break;
+      }
+    }
+  }
+  
+  return htmlParts.join('\n');
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -56,6 +135,7 @@ interface ChatMessage {
 
 export default function DocumentCreator() {
   const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [topic, setTopic] = useState("");
   const [loading, setLoading] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
@@ -379,6 +459,18 @@ Response preferences:
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={() => {
+                const html = documentSchemaToHtml(documentSchema);
+                navigate('/tools/word-editor', { state: { initialContent: html } });
+              }}
+            >
+              <Edit className="h-4 w-4" />
+              Edit Document
+            </Button>
             
             <Select value={selectedTheme} onValueChange={handleThemeChange}>
               <SelectTrigger className="w-36 h-10">

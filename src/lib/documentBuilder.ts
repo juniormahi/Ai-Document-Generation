@@ -48,25 +48,32 @@ function getAlignment(align?: string): typeof AlignmentType[keyof typeof Alignme
   }
 }
 
-// Build text runs from schema
+// Build text runs from schema with proper styling
 function buildTextRuns(runs: SchemaTextRun[], theme: DocumentTheme): TextRun[] {
   return runs.map(run => new TextRun({
     text: run.text,
     bold: run.bold,
     italics: run.italic,
     underline: run.underline ? {} : undefined,
-    color: run.color ? hexToDocxColor(run.color) : undefined,
-    size: (run.fontSize || theme.font_size) * 2, // DOCX uses half-points
-    font: theme.font_name,
+    color: run.color ? hexToDocxColor(run.color) : '000000',
+    size: ((run.fontSize || theme.font_size || 12) * 2), // DOCX uses half-points
+    font: theme.font_name || 'Calibri',
   }));
 }
 
-// Build paragraph element
+// Build paragraph element with proper styling
 function buildParagraph(element: ParagraphElement, theme: DocumentTheme): Paragraph {
+  const fontSize = theme.font_size || 12;
+  const fontName = theme.font_name || 'Calibri';
+  
   const children = element.text_runs 
     ? buildTextRuns(element.text_runs, theme)
     : element.text 
-      ? [new TextRun({ text: element.text, font: theme.font_name, size: theme.font_size * 2 })]
+      ? [new TextRun({ 
+          text: element.text, 
+          font: fontName, 
+          size: fontSize * 2,
+        })]
       : [];
 
   return new Paragraph({
@@ -76,7 +83,7 @@ function buildParagraph(element: ParagraphElement, theme: DocumentTheme): Paragr
   });
 }
 
-// Build heading element
+// Build heading element with proper font embedding
 function buildHeading(element: HeadingElement, theme: DocumentTheme): Paragraph {
   const headingLevelMap = {
     heading1: HeadingLevel.HEADING_1,
@@ -92,14 +99,17 @@ function buildHeading(element: HeadingElement, theme: DocumentTheme): Paragraph 
     heading4: 18,
   };
 
+  const headingFont = theme.heading_font || theme.font_name || 'Calibri';
+  const fontSize = fontSizeMap[element.type] || 24;
+
   return new Paragraph({
     children: [
       new TextRun({
         text: element.text,
         bold: true,
-        font: theme.heading_font || theme.font_name,
-        size: fontSizeMap[element.type] * 2,
-        color: hexToDocxColor(theme.primary_color),
+        font: headingFont,
+        size: fontSize * 2, // DOCX uses half-points
+        color: hexToDocxColor(theme.primary_color || '#1a1a1a'),
       })
     ],
     heading: headingLevelMap[element.type],
@@ -114,13 +124,15 @@ function buildHeading(element: HeadingElement, theme: DocumentTheme): Paragraph 
 // Build list element with proper formatting
 function buildList(element: ListElement, theme: DocumentTheme): Paragraph[] {
   const isBullet = element.type === 'bullet_list';
+  const fontName = theme.font_name || 'Calibri';
+  const fontSize = theme.font_size || 12;
   
   return element.items.map((item, index) => new Paragraph({
     children: [
       new TextRun({
         text: item,
-        font: theme.font_name,
-        size: theme.font_size * 2,
+        font: fontName,
+        size: fontSize * 2,
       })
     ],
     bullet: isBullet ? { level: 0 } : undefined,
@@ -132,6 +144,9 @@ function buildList(element: ListElement, theme: DocumentTheme): Paragraph[] {
 
 // Build table element with better formatting
 function buildTable(element: TableElement, theme: DocumentTheme): Table {
+  const fontName = theme.font_name || 'Calibri';
+  const fontSize = theme.font_size || 12;
+  
   const tableRows = element.rows.map((row, rowIndex) => {
     const cells = row.cells.map(cellText => {
       const isHeader = row.isHeader || rowIndex === 0;
@@ -143,8 +158,8 @@ function buildTable(element: TableElement, theme: DocumentTheme): Table {
               new TextRun({
                 text: cellText,
                 bold: isHeader,
-                font: theme.font_name,
-                size: theme.font_size * 2,
+                font: fontName,
+                size: fontSize * 2,
               })
             ],
             spacing: { before: 60, after: 60 },
@@ -175,16 +190,23 @@ function buildTable(element: TableElement, theme: DocumentTheme): Table {
   });
 }
 
-// Build image element
+// Build image element with proper type detection
 async function buildImage(element: ImageElement): Promise<Paragraph | null> {
   if (!element.url) return null;
 
   try {
     // Fetch the image data
     let imageData: ArrayBuffer;
+    let imageType: 'png' | 'jpg' | 'jpeg' | 'gif' | 'bmp' = 'png';
     
     if (element.url.startsWith('data:image')) {
-      // Base64 image - extract the data
+      // Base64 image - extract the data and type
+      const mimeMatch = element.url.match(/data:image\/(png|jpeg|jpg|gif|bmp);base64,/);
+      if (mimeMatch) {
+        imageType = mimeMatch[1] as any;
+        if (imageType === 'jpeg') imageType = 'jpg';
+      }
+      
       const base64Data = element.url.split(',')[1];
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
@@ -195,6 +217,12 @@ async function buildImage(element: ImageElement): Promise<Paragraph | null> {
     } else {
       // External URL - fetch it
       const response = await fetch(element.url);
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('jpeg') || contentType.includes('jpg')) {
+        imageType = 'jpg';
+      } else if (contentType.includes('gif')) {
+        imageType = 'gif';
+      }
       imageData = await response.arrayBuffer();
     }
 
@@ -208,7 +236,7 @@ async function buildImage(element: ImageElement): Promise<Paragraph | null> {
           width: convertInchesToTwip(widthInches) / 20, // Convert to EMUs
           height: convertInchesToTwip(heightInches) / 20,
         },
-        type: 'png',
+        type: imageType,
       })
     ];
 

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Navigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { SEO } from '@/components/SEO';
 import { WordEditor } from '@/components/word-editor';
@@ -26,12 +26,28 @@ import {
   convertInchesToTwip,
 } from 'docx';
 
+interface LocationState {
+  initialContent?: string;
+}
+
 export default function WordEditorPage() {
   const { user, loading: authLoading } = useAuth();
-  const [documentHtml, setDocumentHtml] = useState('');
+  const location = useLocation();
+  const state = location.state as LocationState | null;
+  const [documentHtml, setDocumentHtml] = useState(state?.initialContent || '');
   const [showChat, setShowChat] = useState(false);
   const [chatLoading, setChatLoading] = useState(false);
   const { toast } = useToast();
+
+  // Show toast if document was loaded from Document Creator
+  useEffect(() => {
+    if (state?.initialContent) {
+      toast({
+        title: "Document loaded",
+        description: "Your document is ready for editing",
+      });
+    }
+  }, []);
 
   if (authLoading) {
     return (
