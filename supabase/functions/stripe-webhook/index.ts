@@ -385,14 +385,24 @@ serve(async (req) => {
           console.log('User role updated to premium');
         }
 
-        // Send subscription purchased email
-        const userEmail = session.customer_email || await getUserEmail(userId);
-        if (userEmail) {
-          await sendEmail(
-            userEmail,
-            `Welcome to MyDocMaker ${planType.charAt(0).toUpperCase() + planType.slice(1)}! 🎉`,
-            getSubscriptionPurchasedEmail(planType, session.amount_total || 0, isTrialing)
-          );
+        // Send payment success email via dedicated function
+        try {
+          const { error: emailError } = await supabase.functions.invoke('notify-payment-success', {
+            body: {
+              userId,
+              planType,
+              amount: session.amount_total || 0,
+              billingPeriod,
+            },
+          });
+          
+          if (emailError) {
+            console.error('Error sending payment success email:', emailError);
+          } else {
+            console.log('Payment success email sent');
+          }
+        } catch (emailErr) {
+          console.error('Failed to send payment success email:', emailErr);
         }
 
         break;
