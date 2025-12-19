@@ -1172,6 +1172,7 @@ export default function Index() {
                 <li><Link to="/subscription" className="hover:text-foreground transition-colors">Pricing</Link></li>
                 <li><Link to="/blog" className="hover:text-foreground transition-colors">Blog</Link></li>
                 <li><Link to="/faq" className="hover:text-foreground transition-colors">FAQ</Link></li>
+                <li><Link to="/help" className="hover:text-foreground transition-colors">Help Center</Link></li>
                 <li><Link to="/about" className="hover:text-foreground transition-colors">About Us</Link></li>
                 <li><Link to="/contact" className="hover:text-foreground transition-colors">Contact</Link></li>
               </ul>

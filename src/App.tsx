@@ -23,6 +23,8 @@ import About from "./pages/About";
 import RefundPolicy from "./pages/RefundPolicy";
 import CookiesPolicy from "./pages/CookiesPolicy";
 import ServicePolicy from "./pages/ServicePolicy";
+import HelpCenter from "./pages/HelpCenter";
+import { LiveChatWidget } from "./components/LiveChatWidget";
 import DocumentCreator from "./pages/tools/DocumentCreator";
 import PresentationMaker from "./pages/tools/PresentationMaker";
 import AIWriter from "./pages/tools/AIWriter";
@@ -61,6 +63,7 @@ function AnimatedRoutes() {
         <Route path="/refund-policy" element={<PageTransition><RefundPolicy /></PageTransition>} />
         <Route path="/cookies" element={<PageTransition><CookiesPolicy /></PageTransition>} />
         <Route path="/service-policy" element={<PageTransition><ServicePolicy /></PageTransition>} />
+        <Route path="/help" element={<PageTransition><HelpCenter /></PageTransition>} />
         
         {/* Main dashboard */}
         <Route path="/dashboard" element={<PageTransition><Dashboard /></PageTransition>} />
@@ -108,6 +111,7 @@ const App = () => (
       <BrowserRouter>
         <AnimatedRoutes />
         <CookieConsent />
+        <LiveChatWidget />
       </BrowserRouter>
     </TooltipProvider>
   </AuthProvider>
