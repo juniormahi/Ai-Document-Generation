@@ -1,12 +1,13 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { 
-  FileText, 
-  Presentation, 
-  Mic, 
+import {
+  FileText,
+  Presentation,
+  Mic,
   MessageSquare,
   FolderOpen,
+  ImageIcon,
   FileSpreadsheet,
   Crown,
   ChevronRight,
@@ -18,7 +19,7 @@ import {
   Plus,
   Settings,
   Wrench,
-  Bot
+  Bot,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -100,6 +101,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const dashboardLinks = [
     { to: "/files", icon: FolderOpen, label: "All Files" },
+    { to: "/gallery", icon: ImageIcon, label: "Gallery" },
     { to: "/dashboard", icon: Wrench, label: "Tools" },
     { to: "/tools/chat", icon: Bot, label: "ChatGPT" },
   ];
