@@ -63,7 +63,7 @@ verify_jwt = false
 [functions.notify-subscription-change]
 verify_jwt = false
 
-[functions.stripe-webhook]
+[functions.lemonsqueezy-webhook]
 verify_jwt = false
 
 [functions.health-check]

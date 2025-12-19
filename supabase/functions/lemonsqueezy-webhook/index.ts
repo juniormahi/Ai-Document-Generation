@@ -1,19 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
 
-const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
-const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
+const webhookSecret = Deno.env.get('LEMONSQUEEZY_WEBHOOK_SECRET');
 const resendApiKey = Deno.env.get('RESEND_API_KEY');
-
-if (!stripeSecretKey) {
-  console.error('STRIPE_SECRET_KEY is not set');
-}
-
-const stripe = new Stripe(stripeSecretKey as string, {
-  apiVersion: '2023-10-16',
-  httpClient: Stripe.createFetchHttpClient(),
-});
 
 const supabaseUrl = Deno.env.get('SUPABASE_URL') as string;
 const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string;
@@ -21,7 +10,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-firebase-token, apikey, content-type, stripe-signature',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, x-firebase-token, apikey, content-type, x-signature',
 };
 
 // Email templates
@@ -142,56 +131,6 @@ const getSubscriptionCanceledEmail = (planType: string, endDate: string) => `
 </html>
 `;
 
-const getTrialEndingEmail = (daysLeft: number, planType: string) => `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .header { background: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%); color: white; padding: 30px; border-radius: 12px 12px 0 0; text-align: center; }
-    .content { background: #f9fafb; padding: 30px; border-radius: 0 0 12px 12px; }
-    .highlight { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3b82f6; }
-    .button { display: inline-block; background: #6366f1; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; margin-top: 20px; }
-    .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 20px; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>⏰ Your Trial Ends in ${daysLeft} Days</h1>
-    </div>
-    <div class="content">
-      <p>Hi there! Just a friendly reminder that your MyDocMaker ${planType} trial is ending soon.</p>
-      
-      <div class="highlight">
-        <strong>What happens next:</strong><br>
-        After your trial ends, your payment method will be charged automatically to continue your ${planType} plan.
-        If you don't want to continue, you can cancel anytime before the trial ends.
-      </div>
-      
-      <p>During your trial, you've had access to:</p>
-      <ul>
-        <li>✓ Unlimited document generation</li>
-        <li>✓ AI-powered presentations</li>
-        <li>✓ Smart spreadsheets</li>
-        <li>✓ Voice generation</li>
-      </ul>
-      
-      <p>Keep all these features by staying subscribed!</p>
-      
-      <a href="https://mydocmaker.com/settings" class="button">Manage Subscription</a>
-      
-      <div class="footer">
-        <p>Questions? Reply to this email and we'll help you out.</p>
-        <p>© ${new Date().getFullYear()} MyDocMaker. All rights reserved.</p>
-      </div>
-    </div>
-  </div>
-</body>
-</html>
-`;
-
 const getPaymentFailedEmail = () => `
 <!DOCTYPE html>
 <html>
@@ -284,89 +223,104 @@ async function getUserEmail(userId: string): Promise<string | null> {
   return data?.email || null;
 }
 
+// Verify LemonSqueezy webhook signature
+async function verifySignature(payload: string, signature: string): Promise<boolean> {
+  if (!webhookSecret) {
+    console.error('LEMONSQUEEZY_WEBHOOK_SECRET is not configured');
+    return false;
+  }
+  
+  try {
+    const encoder = new TextEncoder();
+    const key = encoder.encode(webhookSecret);
+    const data = encoder.encode(payload);
+    
+    const cryptoKey = await crypto.subtle.importKey(
+      'raw',
+      key,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const signatureBuffer = await crypto.subtle.sign('HMAC', cryptoKey, data);
+    const expectedSignature = Array.from(new Uint8Array(signatureBuffer))
+      .map(b => b.toString(16).padStart(2, '0'))
+      .join('');
+    
+    return signature === expectedSignature;
+  } catch (error) {
+    console.error('Error verifying signature:', error);
+    return false;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const signature = req.headers.get('stripe-signature');
+    const signature = req.headers.get('x-signature');
     if (!signature) {
-      console.error('No stripe signature found in request');
+      console.error('No signature found in request');
       return new Response(JSON.stringify({ error: 'No signature' }), { 
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    if (!webhookSecret) {
-      console.error('STRIPE_WEBHOOK_SECRET is not configured');
-      return new Response(JSON.stringify({ error: 'Webhook secret not configured' }), { 
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      });
-    }
-
     const body = await req.text();
-    let event: Stripe.Event;
     
-    try {
-      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
-      console.log('Webhook event verified:', event.type, event.id);
-    } catch (err: any) {
-      console.error('Webhook signature verification failed:', err.message);
-      return new Response(JSON.stringify({ error: `Webhook Error: ${err.message}` }), { 
+    // Verify signature
+    const isValid = await verifySignature(body, signature);
+    if (!isValid) {
+      console.error('Webhook signature verification failed');
+      return new Response(JSON.stringify({ error: 'Invalid signature' }), { 
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    // Handle different event types
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        console.log('Processing checkout.session.completed:', session.id);
+    const event = JSON.parse(body);
+    const eventName = event.meta?.event_name;
+    const data = event.data;
+    
+    console.log('LemonSqueezy webhook event:', eventName);
+
+    switch (eventName) {
+      case 'order_created': {
+        console.log('Processing order_created');
+        const customData = data.attributes?.custom_data || {};
+        const userId = customData.user_id;
+        const planType = customData.plan_type || 'standard';
+        const billingPeriod = customData.billing_period || 'monthly';
         
-        if (!session.subscription) {
-          console.log('No subscription in session, skipping');
-          break;
-        }
-
-        // Get the subscription details
-        const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
-        const userId = session.client_reference_id || session.metadata?.user_id;
-
         if (!userId) {
-          console.error('No user ID found in session');
+          console.error('No user ID found in order');
           break;
         }
 
-        console.log('Upserting subscription for user:', userId);
-        const planType = session.metadata?.plan_type || 'standard';
-        const billingPeriod = session.metadata?.billing_period || 'monthly';
-        const isTrialing = subscription.status === 'trialing';
-        
+        const customerId = data.attributes?.customer_id?.toString() || '';
+        const amount = data.attributes?.total || 0;
+
         // Upsert subscription record
         const { error: subError } = await supabase
           .from('subscriptions')
           .upsert({
             user_id: userId,
-            stripe_customer_id: session.customer as string,
-            stripe_subscription_id: session.subscription as string,
+            stripe_customer_id: `ls_${customerId}`, // Prefix with ls_ for LemonSqueezy
             plan_type: planType,
             billing_period: billingPeriod,
-            status: isTrialing ? 'trialing' : 'active',
-            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-            trial_end: subscription.trial_end ? new Date(subscription.trial_end * 1000).toISOString() : null,
+            status: 'active',
+            current_period_start: new Date().toISOString(),
+            current_period_end: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
           }, {
             onConflict: 'user_id'
           });
 
         if (subError) {
           console.error('Error upserting subscription:', subError);
-        } else {
-          console.log('Subscription upserted successfully');
         }
 
         // Update user role to premium
@@ -374,82 +328,132 @@ serve(async (req) => {
           .from('user_roles')
           .upsert({
             user_id: userId,
-            role: 'premium',
+            role: planType === 'premium' ? 'premium' : 'standard',
           }, {
             onConflict: 'user_id'
           });
 
         if (roleError) {
           console.error('Error updating user role:', roleError);
-        } else {
-          console.log('User role updated to premium');
         }
 
-        // Send payment success email via dedicated function
-        try {
-          const { error: emailError } = await supabase.functions.invoke('notify-payment-success', {
-            body: {
-              userId,
-              planType,
-              amount: session.amount_total || 0,
-              billingPeriod,
-            },
-          });
-          
-          if (emailError) {
-            console.error('Error sending payment success email:', emailError);
-          } else {
-            console.log('Payment success email sent');
-          }
-        } catch (emailErr) {
-          console.error('Failed to send payment success email:', emailErr);
+        // Send welcome email
+        const userEmail = await getUserEmail(userId);
+        if (userEmail) {
+          await sendEmail(
+            userEmail,
+            `Welcome to MyDocMaker ${planType.charAt(0).toUpperCase() + planType.slice(1)}!`,
+            getSubscriptionPurchasedEmail(planType, amount, false)
+          );
         }
 
+        console.log('Order processed successfully for user:', userId);
         break;
       }
 
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log('Processing subscription.updated:', subscription.id, 'Status:', subscription.status);
+      case 'subscription_created': {
+        console.log('Processing subscription_created');
+        const customData = data.attributes?.custom_data || {};
+        const userId = customData.user_id;
+        const planType = customData.plan_type || 'standard';
+        const billingPeriod = customData.billing_period || 'monthly';
         
+        if (!userId) {
+          console.error('No user ID found in subscription');
+          break;
+        }
+
+        const subscriptionId = data.id?.toString() || '';
+        const customerId = data.attributes?.customer_id?.toString() || '';
+        const status = data.attributes?.status || 'active';
+        const renewsAt = data.attributes?.renews_at;
+        const trialEndsAt = data.attributes?.trial_ends_at;
+
+        const { error: subError } = await supabase
+          .from('subscriptions')
+          .upsert({
+            user_id: userId,
+            stripe_customer_id: `ls_${customerId}`,
+            stripe_subscription_id: `ls_${subscriptionId}`,
+            plan_type: planType,
+            billing_period: billingPeriod,
+            status: status === 'on_trial' ? 'trialing' : 'active',
+            current_period_start: new Date().toISOString(),
+            current_period_end: renewsAt || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            trial_end: trialEndsAt || null,
+          }, {
+            onConflict: 'user_id'
+          });
+
+        if (subError) {
+          console.error('Error upserting subscription:', subError);
+        }
+
+        // Update user role
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .upsert({
+            user_id: userId,
+            role: planType === 'premium' ? 'premium' : 'standard',
+          }, {
+            onConflict: 'user_id'
+          });
+
+        if (roleError) {
+          console.error('Error updating user role:', roleError);
+        }
+
+        console.log('Subscription created for user:', userId);
+        break;
+      }
+
+      case 'subscription_updated': {
+        console.log('Processing subscription_updated');
+        const subscriptionId = `ls_${data.id}`;
+        const status = data.attributes?.status;
+        const renewsAt = data.attributes?.renews_at;
+        const endsAt = data.attributes?.ends_at;
+
+        let dbStatus = 'active';
+        if (status === 'on_trial') dbStatus = 'trialing';
+        else if (status === 'cancelled' || status === 'expired') dbStatus = 'canceled';
+        else if (status === 'past_due') dbStatus = 'past_due';
+
         const { error } = await supabase
           .from('subscriptions')
           .update({
-            status: subscription.status as any,
-            current_period_start: new Date(subscription.current_period_start * 1000).toISOString(),
-            current_period_end: new Date(subscription.current_period_end * 1000).toISOString(),
-            canceled_at: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : null,
+            status: dbStatus,
+            current_period_end: renewsAt || endsAt,
           })
-          .eq('stripe_subscription_id', subscription.id);
+          .eq('stripe_subscription_id', subscriptionId);
 
         if (error) {
           console.error('Error updating subscription:', error);
-        } else {
-          console.log('Subscription updated successfully');
         }
 
+        console.log('Subscription updated:', subscriptionId);
         break;
       }
 
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log('Processing subscription.deleted:', subscription.id);
+      case 'subscription_cancelled':
+      case 'subscription_expired': {
+        console.log('Processing subscription cancellation/expiration');
+        const subscriptionId = `ls_${data.id}`;
         
-        // Get user_id and email from subscription
+        // Get user info before updating
         const { data: subData } = await supabase
           .from('subscriptions')
           .select('user_id, plan_type, current_period_end')
-          .eq('stripe_subscription_id', subscription.id)
+          .eq('stripe_subscription_id', subscriptionId)
           .single();
 
-        // Update subscription status
         const { error } = await supabase
           .from('subscriptions')
           .update({
             status: 'canceled',
             canceled_at: new Date().toISOString(),
           })
-          .eq('stripe_subscription_id', subscription.id);
+          .eq('stripe_subscription_id', subscriptionId);
 
         if (error) {
           console.error('Error updating subscription:', error);
@@ -464,109 +468,138 @@ serve(async (req) => {
 
           if (roleError) {
             console.error('Error downgrading user role:', roleError);
-          } else {
-            console.log('User role downgraded to free');
           }
 
           // Send cancellation email
           const userEmail = await getUserEmail(subData.user_id);
           if (userEmail) {
             const endDate = subData.current_period_end 
-              ? new Date(subData.current_period_end).toLocaleDateString('en-US', { 
-                  year: 'numeric', month: 'long', day: 'numeric' 
-                })
-              : 'the end of your billing period';
-            
+              ? new Date(subData.current_period_end).toLocaleDateString()
+              : 'soon';
             await sendEmail(
               userEmail,
               'Your MyDocMaker Subscription Has Been Canceled',
-              getSubscriptionCanceledEmail(subData.plan_type || 'premium', endDate)
+              getSubscriptionCanceledEmail(subData.plan_type, endDate)
             );
           }
         }
 
+        console.log('Subscription canceled:', subscriptionId);
         break;
       }
 
-      case 'invoice.payment_succeeded': {
-        const invoice = event.data.object as Stripe.Invoice;
-        console.log('Payment succeeded for invoice:', invoice.id);
-        
-        // Update subscription status to active if it was past_due
-        if (invoice.subscription) {
-          await supabase
-            .from('subscriptions')
-            .update({ status: 'active' })
-            .eq('stripe_subscription_id', invoice.subscription as string)
-            .eq('status', 'past_due');
-        }
-        break;
-      }
+      case 'subscription_payment_failed': {
+        console.log('Processing payment failed');
+        const subscriptionId = `ls_${data.id}`;
 
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object as Stripe.Invoice;
-        console.log('Payment failed for invoice:', invoice.id);
-        
-        if (invoice.subscription) {
-          const { error } = await supabase
-            .from('subscriptions')
-            .update({ status: 'past_due' })
-            .eq('stripe_subscription_id', invoice.subscription as string);
+        const { data: subData } = await supabase
+          .from('subscriptions')
+          .select('user_id')
+          .eq('stripe_subscription_id', subscriptionId)
+          .single();
 
-          if (error) {
-            console.error('Error updating subscription to past_due:', error);
-          }
+        // Update status to past_due
+        await supabase
+          .from('subscriptions')
+          .update({ status: 'past_due' })
+          .eq('stripe_subscription_id', subscriptionId);
 
-          // Send payment failed email
-          if (invoice.customer_email) {
+        // Send payment failed email
+        if (subData?.user_id) {
+          const userEmail = await getUserEmail(subData.user_id);
+          if (userEmail) {
             await sendEmail(
-              invoice.customer_email,
-              '⚠️ Payment Failed - Action Required',
+              userEmail,
+              'Action Required: Payment Failed for MyDocMaker',
               getPaymentFailedEmail()
             );
           }
         }
+
+        console.log('Payment failed processed');
         break;
       }
 
-      case 'customer.subscription.trial_will_end': {
-        const subscription = event.data.object as Stripe.Subscription;
-        console.log('Trial ending soon for subscription:', subscription.id);
-        
-        // Get user info
-        const { data: subData } = await supabase
-          .from('subscriptions')
-          .select('user_id, plan_type')
-          .eq('stripe_subscription_id', subscription.id)
-          .single();
+      case 'subscription_payment_success':
+      case 'subscription_payment_recovered': {
+        console.log('Processing payment success/recovery');
+        const subscriptionId = `ls_${data.id}`;
 
-        if (subData?.user_id) {
-          const userEmail = await getUserEmail(subData.user_id);
-          if (userEmail && subscription.trial_end) {
-            const daysLeft = Math.ceil((subscription.trial_end * 1000 - Date.now()) / (1000 * 60 * 60 * 24));
-            await sendEmail(
-              userEmail,
-              `⏰ Your MyDocMaker Trial Ends in ${daysLeft} Days`,
-              getTrialEndingEmail(daysLeft, subData.plan_type || 'premium')
-            );
-          }
+        await supabase
+          .from('subscriptions')
+          .update({ status: 'active' })
+          .eq('stripe_subscription_id', subscriptionId);
+
+        console.log('Payment recovered, subscription reactivated');
+        break;
+      }
+
+      case 'subscription_resumed':
+      case 'subscription_unpaused': {
+        console.log('Processing subscription resume/unpause');
+        const subscriptionId = `ls_${data.id}`;
+
+        await supabase
+          .from('subscriptions')
+          .update({ 
+            status: 'active',
+            canceled_at: null 
+          })
+          .eq('stripe_subscription_id', subscriptionId);
+
+        console.log('Subscription resumed');
+        break;
+      }
+
+      case 'subscription_paused': {
+        console.log('Processing subscription pause');
+        const subscriptionId = `ls_${data.id}`;
+
+        await supabase
+          .from('subscriptions')
+          .update({ status: 'canceled' })
+          .eq('stripe_subscription_id', subscriptionId);
+
+        console.log('Subscription paused');
+        break;
+      }
+
+      case 'order_refunded': {
+        console.log('Processing refund');
+        // Handle refund - typically downgrade user
+        const customData = data.attributes?.custom_data || {};
+        const userId = customData.user_id;
+
+        if (userId) {
+          await supabase
+            .from('user_roles')
+            .update({ role: 'free' })
+            .eq('user_id', userId);
+
+          await supabase
+            .from('subscriptions')
+            .update({ status: 'canceled' })
+            .eq('user_id', userId);
         }
+
+        console.log('Refund processed');
         break;
       }
 
       default:
-        console.log(`Unhandled event type: ${event.type}`);
+        console.log('Unhandled event type:', eventName);
     }
 
     return new Response(JSON.stringify({ received: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
+
   } catch (error: any) {
-    console.error('Error processing webhook:', error);
+    console.error('Webhook error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
 });
