@@ -22,6 +22,7 @@ import Contact from "./pages/Contact";
 import About from "./pages/About";
 import RefundPolicy from "./pages/RefundPolicy";
 import CookiesPolicy from "./pages/CookiesPolicy";
+import ServicePolicy from "./pages/ServicePolicy";
 import DocumentCreator from "./pages/tools/DocumentCreator";
 import PresentationMaker from "./pages/tools/PresentationMaker";
 import AIWriter from "./pages/tools/AIWriter";
@@ -59,6 +60,7 @@ function AnimatedRoutes() {
         <Route path="/about" element={<PageTransition><About /></PageTransition>} />
         <Route path="/refund-policy" element={<PageTransition><RefundPolicy /></PageTransition>} />
         <Route path="/cookies" element={<PageTransition><CookiesPolicy /></PageTransition>} />
+        <Route path="/service-policy" element={<PageTransition><ServicePolicy /></PageTransition>} />
         
         {/* Main dashboard */}
         <Route path="/dashboard" element={<PageTransition><Dashboard /></PageTransition>} />

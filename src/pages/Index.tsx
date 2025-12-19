@@ -1183,8 +1183,19 @@ export default function Index() {
                 <li><Link to="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link></li>
                 <li><Link to="/cookies" className="hover:text-foreground transition-colors">Cookies Policy</Link></li>
                 <li><Link to="/refund-policy" className="hover:text-foreground transition-colors">Refund Policy</Link></li>
+                <li><Link to="/service-policy" className="hover:text-foreground transition-colors">Service Policy</Link></li>
               </ul>
             </div>
+          </div>
+          
+          {/* Contact Info */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-6 py-6 border-t border-border">
+            <a href="tel:+923369183893" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <span>📞</span> +92 336 9183893
+            </a>
+            <a href="mailto:maheerkhan3a@gmail.com" className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <span>✉️</span> maheerkhan3a@gmail.com
+            </a>
           </div>
           
           <div className="flex flex-col sm:flex-row items-center justify-between pt-8 border-t border-border gap-4">

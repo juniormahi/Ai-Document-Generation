@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Mail, MessageSquare, Clock, Send } from "lucide-react";
+import { ArrowLeft, Mail, Phone, MessageSquare, Clock, Send, Headphones } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -35,20 +35,30 @@ export default function Contact() {
     {
       icon: Mail,
       title: "Email Us",
-      description: "support@mydocmaker.com",
+      description: "maheerkhan3a@gmail.com",
       detail: "We'll respond within 24 hours",
+      href: "mailto:maheerkhan3a@gmail.com",
     },
     {
-      icon: MessageSquare,
-      title: "Live Chat",
-      description: "Chat with our team",
-      detail: "Available Mon-Fri, 9am-5pm EST",
+      icon: Phone,
+      title: "Call Us",
+      description: "+92 336 9183893",
+      detail: "Mon-Fri, 9am-6pm PKT",
+      href: "tel:+923369183893",
+    },
+    {
+      icon: Headphones,
+      title: "Customer Support",
+      description: "24/7 Help Center",
+      detail: "Get instant help anytime",
+      href: "/faq",
     },
     {
       icon: Clock,
       title: "Response Time",
       description: "Within 24 hours",
       detail: "For all inquiries",
+      href: null,
     },
   ];
 
@@ -90,6 +100,29 @@ export default function Contact() {
           </p>
         </motion.div>
 
+        {/* Quick Contact Info Banner */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.05 }}
+          className="bg-primary/10 border border-primary/20 rounded-xl p-6 mb-8"
+        >
+          <div className="flex flex-wrap items-center justify-center gap-8 text-center">
+            <div className="flex items-center gap-3">
+              <Phone className="h-5 w-5 text-primary" />
+              <a href="tel:+923369183893" className="font-medium hover:text-primary transition-colors">
+                +92 336 9183893
+              </a>
+            </div>
+            <div className="flex items-center gap-3">
+              <Mail className="h-5 w-5 text-primary" />
+              <a href="mailto:maheerkhan3a@gmail.com" className="font-medium hover:text-primary transition-colors">
+                maheerkhan3a@gmail.com
+              </a>
+            </div>
+          </div>
+        </motion.div>
+
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Contact Info Cards */}
           <motion.div
@@ -103,16 +136,31 @@ export default function Contact() {
                 key={index}
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-colors"
               >
-                <div className="flex items-start gap-4">
-                  <div className="p-3 bg-primary/10 rounded-lg">
-                    <item.icon className="h-6 w-6 text-primary" />
+                {item.href ? (
+                  <Link to={item.href.startsWith('/') ? item.href : '#'}>
+                    <a href={item.href.startsWith('/') ? undefined : item.href} className="flex items-start gap-4">
+                      <div className="p-3 bg-primary/10 rounded-lg">
+                        <item.icon className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold mb-1">{item.title}</h3>
+                        <p className="text-foreground">{item.description}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{item.detail}</p>
+                      </div>
+                    </a>
+                  </Link>
+                ) : (
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 bg-primary/10 rounded-lg">
+                      <item.icon className="h-6 w-6 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold mb-1">{item.title}</h3>
+                      <p className="text-foreground">{item.description}</p>
+                      <p className="text-sm text-muted-foreground mt-1">{item.detail}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold mb-1">{item.title}</h3>
-                    <p className="text-foreground">{item.description}</p>
-                    <p className="text-sm text-muted-foreground mt-1">{item.detail}</p>
-                  </div>
-                </div>
+                )}
               </div>
             ))}
           </motion.div>
@@ -185,6 +233,47 @@ export default function Contact() {
             </div>
           </motion.div>
         </div>
+
+        {/* Customer Support Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="mt-12"
+        >
+          <div className="bg-muted/30 rounded-2xl p-8">
+            <div className="text-center mb-8">
+              <Headphones className="h-12 w-12 text-primary mx-auto mb-4" />
+              <h2 className="text-2xl font-bold mb-2">Customer Support</h2>
+              <p className="text-muted-foreground max-w-2xl mx-auto">
+                Our dedicated support team is here to help you get the most out of MyDocMaker.
+              </p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="bg-card border border-border rounded-xl p-6 text-center">
+                <h3 className="font-semibold mb-2">Help Center</h3>
+                <p className="text-sm text-muted-foreground mb-4">Browse our FAQ for quick answers</p>
+                <Link to="/faq">
+                  <Button variant="outline" size="sm">Visit FAQ</Button>
+                </Link>
+              </div>
+              <div className="bg-card border border-border rounded-xl p-6 text-center">
+                <h3 className="font-semibold mb-2">Email Support</h3>
+                <p className="text-sm text-muted-foreground mb-4">Get detailed help via email</p>
+                <a href="mailto:maheerkhan3a@gmail.com">
+                  <Button variant="outline" size="sm">Send Email</Button>
+                </a>
+              </div>
+              <div className="bg-card border border-border rounded-xl p-6 text-center">
+                <h3 className="font-semibold mb-2">Phone Support</h3>
+                <p className="text-sm text-muted-foreground mb-4">Speak directly with our team</p>
+                <a href="tel:+923369183893">
+                  <Button variant="outline" size="sm">Call Now</Button>
+                </a>
+              </div>
+            </div>
+          </div>
+        </motion.div>
       </main>
     </div>
   );
