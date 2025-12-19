@@ -26,12 +26,43 @@ const FUNCTIONS_TO_TEST = [
   { name: "ai-chat", requiresAuth: true, body: { messages: [{ role: "user", content: "test" }] } },
 ];
 
+const ADMIN_EMAIL = "maheerkhan3a@gmail.com";
+
 export default function Debug() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [results, setResults] = useState<FunctionStatus[]>(
     FUNCTIONS_TO_TEST.map((f) => ({ name: f.name, status: "idle" }))
   );
   const [testing, setTesting] = useState(false);
+
+  // Check if user is admin
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user || user.email !== ADMIN_EMAIL) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="max-w-md">
+          <CardHeader>
+            <CardTitle className="text-destructive">Access Denied</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-muted-foreground">
+              You don't have permission to access this page.
+            </p>
+            <Link to="/dashboard">
+              <Button>Back to Dashboard</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const testFunction = async (fn: typeof FUNCTIONS_TO_TEST[0], index: number) => {
     setResults((prev) => {
