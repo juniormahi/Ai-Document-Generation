@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { SEO } from "@/components/SEO";
 import { InteractiveLogo } from "@/components/InteractiveLogo";
@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   ArrowLeft, Mail, Eye, Trash2, RefreshCw, 
-  MessageSquare, Clock, CheckCircle2
+  MessageSquare, Clock, CheckCircle2, ShieldAlert
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -17,6 +17,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAuth } from "@/contexts/AuthContext";
+
+const ADMIN_EMAIL = "maheerkhan3a@gmail.com";
 
 interface ContactMessage {
   id: string;
@@ -30,9 +33,13 @@ interface ContactMessage {
 }
 
 export default function AdminMessages() {
+  const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
+
+  // Check admin access
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
   const fetchMessages = async () => {
     setLoading(true);
@@ -53,8 +60,37 @@ export default function AdminMessages() {
   };
 
   useEffect(() => {
-    fetchMessages();
-  }, []);
+    if (isAdmin) {
+      fetchMessages();
+    }
+  }, [isAdmin]);
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Show access denied if not admin
+  if (!user || !isAdmin) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center p-8">
+          <ShieldAlert className="h-16 w-16 mx-auto text-destructive mb-4" />
+          <h1 className="text-2xl font-bold mb-2">Access Denied</h1>
+          <p className="text-muted-foreground mb-6">
+            You don't have permission to access this page.
+          </p>
+          <Link to="/">
+            <Button>Go to Home</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const markAsRead = async (id: string) => {
     try {
