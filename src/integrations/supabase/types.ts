@@ -284,6 +284,54 @@ export type Database = {
         }
         Relationships: []
       }
+      user_preferences: {
+        Row: {
+          auto_save: boolean
+          billing_updates: boolean
+          compact_mode: boolean
+          created_at: string
+          email_notifications: boolean
+          id: string
+          language: string
+          marketing_emails: boolean
+          product_updates: boolean
+          security_alerts: boolean
+          timezone: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_save?: boolean
+          billing_updates?: boolean
+          compact_mode?: boolean
+          created_at?: string
+          email_notifications?: boolean
+          id?: string
+          language?: string
+          marketing_emails?: boolean
+          product_updates?: boolean
+          security_alerts?: boolean
+          timezone?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_save?: boolean
+          billing_updates?: boolean
+          compact_mode?: boolean
+          created_at?: string
+          email_notifications?: boolean
+          id?: string
+          language?: string
+          marketing_emails?: boolean
+          product_updates?: boolean
+          security_alerts?: boolean
+          timezone?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

@@ -13,7 +13,7 @@ import {
   Loader2, User, Bell, Shield, CreditCard, Trash2, AlertTriangle, Crown, 
   Calendar, Settings2, Palette, Globe, Key, Download, History, FileText,
   Moon, Sun, Monitor, Lock, Mail, Smartphone, HelpCircle, ExternalLink,
-  ChevronRight
+  ChevronRight, Save
 } from "lucide-react";
 import { Navigate, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -59,6 +59,9 @@ export default function Settings() {
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [savingNotifications, setSavingNotifications] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const [profile, setProfile] = useState({ full_name: "", email: "", avatar_url: "" });
   const [activeTab, setActiveTab] = useState("account");
   const [notifications, setNotifications] = useState({
@@ -101,6 +104,31 @@ export default function Settings() {
         });
       } else {
         setProfile({ full_name: "", email: user?.email || "", avatar_url: "" });
+      }
+
+      // Load user preferences
+      if (user) {
+        const { data: prefsData } = await supabase
+          .from('user_preferences')
+          .select('*')
+          .eq('user_id', user.uid)
+          .maybeSingle();
+
+        if (prefsData) {
+          setNotifications({
+            email: prefsData.email_notifications,
+            marketing: prefsData.marketing_emails,
+            updates: prefsData.product_updates,
+            security: prefsData.security_alerts,
+            billing: prefsData.billing_updates,
+          });
+          setPreferences({
+            language: prefsData.language || 'en',
+            timezone: prefsData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+            autoSave: prefsData.auto_save,
+            compactMode: prefsData.compact_mode,
+          });
+        }
       }
     } catch (error) {
       console.error('Error loading data:', error);
@@ -207,12 +235,119 @@ export default function Settings() {
     }
   };
 
+  const handleSaveNotifications = async () => {
+    if (!user) return;
+    setSavingNotifications(true);
+    try {
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert({
+          user_id: user.uid,
+          email_notifications: notifications.email,
+          marketing_emails: notifications.marketing,
+          product_updates: notifications.updates,
+          security_alerts: notifications.security,
+          billing_updates: notifications.billing,
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      toast.success('Notification preferences saved');
+    } catch (error: any) {
+      toast.error('Failed to save notification preferences');
+      console.error(error);
+    } finally {
+      setSavingNotifications(false);
+    }
+  };
+
+  const handleSavePreferences = async () => {
+    if (!user) return;
+    setSavingPreferences(true);
+    try {
+      const { error } = await supabase
+        .from('user_preferences')
+        .upsert({
+          user_id: user.uid,
+          auto_save: preferences.autoSave,
+          compact_mode: preferences.compactMode,
+          language: preferences.language,
+          timezone: preferences.timezone,
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      toast.success('Preferences saved');
+    } catch (error: any) {
+      toast.error('Failed to save preferences');
+      console.error(error);
+    } finally {
+      setSavingPreferences(false);
+    }
+  };
+
   const handleExportData = async () => {
+    if (!user) return;
     toast.info('Preparing your data export...');
-    // This would typically call an edge function to compile user data
-    setTimeout(() => {
-      toast.success('Data export started. You will receive an email when ready.');
-    }, 1500);
+    
+    try {
+      // Fetch all user data
+      const [profileData, filesData, mediaData, usageData] = await Promise.all([
+        supabase.from('profiles').select('*').eq('user_id', user.uid),
+        supabase.from('file_history').select('*').eq('user_id', user.uid),
+        supabase.from('generated_media').select('*').eq('user_id', user.uid),
+        supabase.from('usage_tracking').select('*').eq('user_id', user.uid),
+      ]);
+
+      const exportData = {
+        exportDate: new Date().toISOString(),
+        profile: profileData.data,
+        files: filesData.data,
+        generatedMedia: mediaData.data,
+        usageHistory: usageData.data,
+      };
+
+      // Create and download JSON file
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `mydocmaker-data-export-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success('Data exported successfully');
+    } catch (error) {
+      toast.error('Failed to export data');
+      console.error(error);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    setDeletingAccount(true);
+    
+    try {
+      // Delete all user data from tables
+      await Promise.all([
+        supabase.from('user_preferences').delete().eq('user_id', user.uid),
+        supabase.from('file_history').delete().eq('user_id', user.uid),
+        supabase.from('generated_files').delete().eq('user_id', user.uid),
+        supabase.from('generated_media').delete().eq('user_id', user.uid),
+        supabase.from('usage_tracking').delete().eq('user_id', user.uid),
+        supabase.from('profiles').delete().eq('user_id', user.uid),
+      ]);
+
+      // Sign out the user
+      await signOut();
+      toast.success('Your account has been deleted');
+      navigate('/');
+    } catch (error: any) {
+      toast.error('Failed to delete account. Please contact support.');
+      console.error(error);
+    } finally {
+      setDeletingAccount(false);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -388,6 +523,12 @@ export default function Settings() {
                         onCheckedChange={(checked) => setPreferences({ ...preferences, compactMode: checked })}
                       />
                     </div>
+                    <Separator />
+                    <Button onClick={handleSavePreferences} disabled={savingPreferences}>
+                      {savingPreferences && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      <Save className="mr-2 h-4 w-4" />
+                      Save Preferences
+                    </Button>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -597,6 +738,12 @@ export default function Settings() {
                         onCheckedChange={(checked) => setNotifications({ ...notifications, marketing: checked })}
                       />
                     </div>
+                    <Separator />
+                    <Button onClick={handleSaveNotifications} disabled={savingNotifications}>
+                      {savingNotifications && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      <Save className="mr-2 h-4 w-4" />
+                      Save Notification Settings
+                    </Button>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -741,7 +888,12 @@ export default function Settings() {
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            <AlertDialogAction 
+                              onClick={handleDeleteAccount}
+                              disabled={deletingAccount}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              {deletingAccount && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                               Yes, Delete My Account
                             </AlertDialogAction>
                           </AlertDialogFooter>
