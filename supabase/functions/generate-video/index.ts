@@ -7,9 +7,9 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, x-firebase-token, apikey, content-type",
 };
 
-// Credit limits
-const FREE_VIDEO_CREDITS = 2;
-const PRO_VIDEO_CREDITS = 30;
+// Daily credit limits for video
+const FREE_DAILY_VIDEO_CREDITS = 2;
+const PRO_DAILY_VIDEO_CREDITS = 20;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -36,35 +36,26 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Check video credits usage
-    const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM format
-    const { data: usageData, error: usageError } = await supabase
+    // Check daily video credits
+    const today = new Date().toISOString().split('T')[0];
+    const { data: usageData } = await supabase
       .from('usage_tracking')
       .select('*')
       .eq('user_id', userId)
-      .gte('date', `${currentMonth}-01`)
-      .order('date', { ascending: false });
+      .eq('date', today)
+      .single();
 
-    if (usageError) {
-      console.error("Error checking usage:", usageError);
-    }
+    // Use voiceovers_generated as proxy for video credits (we can add a dedicated column later)
+    const videosGeneratedToday = usageData?.voiceovers_generated || 0;
+    const dailyLimit = isPremium ? PRO_DAILY_VIDEO_CREDITS : FREE_DAILY_VIDEO_CREDITS;
 
-    // Calculate total videos generated this month
-    const totalVideosThisMonth = usageData?.reduce((sum, row) => {
-      // Use a metadata field or add videos_generated column
-      const videoCount = (row as any).videos_generated || 0;
-      return sum + videoCount;
-    }, 0) || 0;
-
-    const creditLimit = isPremium ? PRO_VIDEO_CREDITS : FREE_VIDEO_CREDITS;
-
-    if (totalVideosThisMonth >= creditLimit) {
+    if (videosGeneratedToday >= dailyLimit) {
       return new Response(
         JSON.stringify({ 
-          error: "Credit limit reached", 
-          message: `You've used all ${creditLimit} video credits for this month. ${!isPremium ? 'Upgrade to Pro for 30 credits/month.' : 'Credits reset next month.'}`,
-          creditsUsed: totalVideosThisMonth,
-          creditLimit: creditLimit
+          error: "Daily credit limit reached", 
+          message: `You've used all ${dailyLimit} video credits for today. ${!isPremium ? 'Upgrade to Pro for 20 daily credits!' : 'Credits reset tomorrow.'}`,
+          creditsUsed: videosGeneratedToday,
+          creditLimit: dailyLimit
         }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -79,7 +70,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Generating video for user ${userId} (premium: ${isPremium}), credits: ${totalVideosThisMonth}/${creditLimit}`);
+    console.log(`Generating video for user ${userId} (premium: ${isPremium}), credits: ${videosGeneratedToday}/${dailyLimit}`);
 
     // Build the message content based on input type
     let messageContent: any;
@@ -87,16 +78,15 @@ serve(async (req) => {
       messageContent = [
         { 
           type: "text", 
-          text: `Create a short ${duration}-second video animation from this image. ${prompt || 'Add subtle motion and bring the scene to life.'} Make it cinematic and engaging.`
+          text: `Create a cinematic ${duration}-second video animation from this image. ${prompt || 'Add smooth camera motion, subtle parallax effects, and bring the scene to life with gentle movements.'} Make it professional and visually stunning with smooth transitions.`
         },
         { type: "image_url", image_url: { url: imageUrl } }
       ];
     } else {
-      messageContent = `Create a short ${duration}-second video: ${prompt}. Make it cinematic and visually stunning.`;
+      messageContent = `Create a cinematic ${duration}-second video scene: ${prompt}. Include smooth camera movements, professional lighting, and make it visually stunning and engaging.`;
     }
 
-    // Note: Using gemini image model as placeholder - actual video generation would need a video model
-    // For production, you'd integrate with a video generation API like RunwayML, Pika, etc.
+    // Note: Using nano-banana for video previews. Full video generation with Veo would require additional integration
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -104,7 +94,7 @@ serve(async (req) => {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
+        model: "google/gemini-2.5-flash-image-preview", // nano-banana for preview
         messages: [{ role: "user", content: messageContent }],
         modalities: ["image", "text"]
       }),
@@ -121,11 +111,17 @@ serve(async (req) => {
         );
       }
       
+      if (response.status === 402) {
+        return new Response(
+          JSON.stringify({ error: "Payment required - please add credits." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      
       throw new Error(`AI API error: ${response.status}`);
     }
 
     const data = await response.json();
-    // For now, we'll return a preview image - actual video URL would come from a video API
     const previewUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     const textContent = data.choices?.[0]?.message?.content;
 
@@ -134,28 +130,19 @@ serve(async (req) => {
     }
 
     // Update usage tracking
-    const today = new Date().toISOString().split('T')[0];
-    const { data: existingUsage } = await supabase
-      .from('usage_tracking')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('date', today)
-      .single();
-
-    if (existingUsage) {
-      // Note: You'd need to add videos_generated column to usage_tracking table
-      // For now, we'll use images_generated as a proxy
+    if (usageData) {
       await supabase
         .from('usage_tracking')
-        .update({ images_generated: (existingUsage.images_generated || 0) + 1 })
-        .eq('id', existingUsage.id);
+        .update({ voiceovers_generated: videosGeneratedToday + 1 })
+        .eq('user_id', userId)
+        .eq('date', today);
     } else {
       await supabase
         .from('usage_tracking')
         .insert({
           user_id: userId,
           date: today,
-          images_generated: 1
+          voiceovers_generated: 1
         });
     }
 
@@ -166,9 +153,9 @@ serve(async (req) => {
         .insert({
           user_id: userId,
           title: `AI Video - ${(prompt || 'Image to Video').substring(0, 50)}`,
-          description: textContent || "Video generated successfully",
+          description: textContent || "Video preview generated successfully",
           media_type: 'video',
-          file_url: previewUrl, // This would be actual video URL in production
+          file_url: previewUrl,
           thumbnail_url: previewUrl,
           prompt: prompt || 'Image to video conversion',
           metadata: { 
@@ -183,17 +170,18 @@ serve(async (req) => {
       }
     }
 
-    console.log(`Video generated successfully for user ${userId}`);
+    console.log(`Video preview generated successfully for user ${userId}`);
 
     return new Response(
       JSON.stringify({
-        videoUrl: previewUrl, // Placeholder - would be actual video URL
+        videoUrl: previewUrl,
         previewUrl: previewUrl,
-        description: textContent || "Video generated successfully",
-        creditsUsed: totalVideosThisMonth + 1,
-        creditLimit: creditLimit,
+        description: textContent || "Video preview generated successfully",
+        creditsUsed: videosGeneratedToday + 1,
+        creditLimit: dailyLimit,
+        creditsRemaining: dailyLimit - (videosGeneratedToday + 1),
         savedToGallery: saveToGallery,
-        note: "Video generation preview - full video generation coming soon"
+        note: "Video preview generated. Full video generation with Veo coming soon!"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
