@@ -7,6 +7,21 @@ interface ImageProcessingResult {
   schema: DocumentSchema;
   imagesGenerated: number;
   errors: string[];
+  subscriptionRequired?: boolean;
+}
+
+// Check if user has paid subscription for image generation
+async function checkPaidSubscription(userId?: string): Promise<boolean> {
+  if (!userId) return false;
+  
+  const { data: subscription } = await supabase
+    .from('subscriptions')
+    .select('plan_type, status')
+    .eq('user_id', userId)
+    .eq('status', 'active')
+    .single();
+
+  return !!subscription;
 }
 
 // Process all image elements with ai_prompt and generate actual images
@@ -17,6 +32,17 @@ export async function processDocumentImages(
 ): Promise<ImageProcessingResult> {
   const errors: string[] = [];
   let imagesGenerated = 0;
+  
+  // Check if user has paid subscription - image generation is paid-only
+  const isPaidUser = await checkPaidSubscription(userId);
+  if (!isPaidUser) {
+    return { 
+      schema, 
+      imagesGenerated: 0, 
+      errors: ['AI Image Generation requires a Standard or Premium subscription.'],
+      subscriptionRequired: true
+    };
+  }
   
   // Find all image elements that need processing
   const imageElements: { sectionIdx: number; elementIdx: number; element: ImageElement }[] = [];
