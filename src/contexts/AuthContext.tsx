@@ -13,6 +13,8 @@ import {
 } from "firebase/auth";
 import { auth, googleProvider, githubProvider } from "@/lib/firebase";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { getAuthHeaders } from "@/hooks/useFirebaseAuth";
 
 interface AuthContextType {
   user: User | null;
@@ -41,13 +43,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, []);
 
+  const sendLoginNotification = async (user: User, loginMethod: string) => {
+    try {
+      await supabase.functions.invoke("send-login-notification", {
+        body: {
+          email: user.email,
+          name: user.displayName || user.email?.split("@")[0],
+          loginMethod,
+          userAgent: navigator.userAgent,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to send login notification:", error);
+    }
+  };
+
+  const sendWelcomeEmail = async () => {
+    try {
+      const headers = await getAuthHeaders();
+      await supabase.functions.invoke("send-welcome-email", { headers });
+    } catch (error) {
+      console.error("Failed to send welcome email:", error);
+    }
+  };
+
   const signIn = async (email: string, password: string) => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const result = await signInWithEmailAndPassword(auth, email, password);
       toast({
         title: "Welcome back!",
         description: "You've successfully signed in.",
       });
+      // Send login notification in background
+      sendLoginNotification(result.user, "Email & Password");
     } catch (error: any) {
       toast({
         title: "Sign in failed",
@@ -60,11 +88,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      const result = await createUserWithEmailAndPassword(auth, email, password);
       toast({
         title: "Account created!",
-        description: "Welcome to MyDocMaker.",
+        description: "Welcome to MyDocMaker. Check your email for a welcome message!",
       });
+      // Send welcome email in background (after a short delay to ensure profile is created)
+      setTimeout(async () => {
+        await sendWelcomeEmail();
+      }, 2000);
     } catch (error: any) {
       toast({
         title: "Sign up failed",
@@ -84,6 +116,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: isNewUser ? "Welcome!" : "Welcome back!",
         description: `You've successfully signed in with Google.`,
       });
+      // Send appropriate email
+      if (isNewUser) {
+        setTimeout(async () => {
+          await sendWelcomeEmail();
+        }, 2000);
+      } else {
+        sendLoginNotification(result.user, "Google");
+      }
       return { isNewUser };
     } catch (error: any) {
       toast({
@@ -104,6 +144,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: isNewUser ? "Welcome!" : "Welcome back!",
         description: `You've successfully signed in with GitHub.`,
       });
+      // Send appropriate email
+      if (isNewUser) {
+        setTimeout(async () => {
+          await sendWelcomeEmail();
+        }, 2000);
+      } else {
+        sendLoginNotification(result.user, "GitHub");
+      }
       return { isNewUser };
     } catch (error: any) {
       toast({
