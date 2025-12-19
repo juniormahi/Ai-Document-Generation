@@ -133,7 +133,18 @@ export default function Settings() {
 
       if (response.error) throw response.error;
       if (response.data?.url) {
-        window.location.href = response.data.url;
+        // Validate Stripe URL to prevent open redirects
+        try {
+          const url = new URL(response.data.url);
+          const allowedHosts = ['stripe.com', 'billing.stripe.com'];
+          if (allowedHosts.some(host => url.hostname.endsWith(host))) {
+            window.location.href = response.data.url;
+          } else {
+            throw new Error('Invalid redirect URL');
+          }
+        } catch {
+          toast.error('Invalid billing portal URL');
+        }
       }
     } catch (error: any) {
       toast.error(error.message || 'Failed to open billing portal');

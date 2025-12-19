@@ -41,12 +41,15 @@ export const TrustBadges = () => {
                 alt={badge.name}
                 className="max-h-12 w-auto object-contain"
                 onError={(e) => {
-                  // Fallback to text if image fails to load
+                  // Fallback to text if image fails to load - using textContent to prevent XSS
                   const target = e.target as HTMLImageElement;
                   target.style.display = 'none';
                   const parent = target.parentElement;
                   if (parent) {
-                    parent.innerHTML = `<span class="text-lg font-bold text-foreground">${badge.name}</span>`;
+                    const span = document.createElement('span');
+                    span.className = 'text-lg font-bold text-foreground';
+                    span.textContent = badge.name;
+                    parent.appendChild(span);
                   }
                 }}
               />
