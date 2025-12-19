@@ -6,8 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, x-firebase-token, apikey, content-type",
 };
 
-// Free users: 4 images/day, Premium: 100 images/day
-const FREE_IMAGE_LIMIT = 4;
+// Standard: 50 images/day, Premium: 100 images/day (Free users cannot generate)
+const STANDARD_IMAGE_LIMIT = 50;
 const PREMIUM_IMAGE_LIMIT = 100;
 
 serve(async (req) => {
@@ -30,17 +30,39 @@ serve(async (req) => {
       );
     }
 
-    // Check usage limits if userId provided
-    if (userId) {
-      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-      const supabase = createClient(supabaseUrl, supabaseKey);
+    // Check if user has paid subscription - image generation is paid-only
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
-      // Check if user can generate more images
+    // Check user's subscription status
+    const { data: subscription, error: subError } = await supabase
+      .from('subscriptions')
+      .select('plan_type, status')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .single();
+
+    if (subError || !subscription) {
+      console.log("No active subscription found for user:", userId);
+      return new Response(
+        JSON.stringify({ 
+          error: "Subscription required",
+          message: "AI Image Generation is available for Standard and Premium subscribers only. Upgrade to unlock this feature!"
+        }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const isPremium = subscription.plan_type === 'premium';
+    const imageLimit = isPremium ? PREMIUM_IMAGE_LIMIT : STANDARD_IMAGE_LIMIT;
+
+    // Check usage limits
+    if (userId) {
       const { data: canGenerate, error: limitError } = await supabase.rpc('check_usage_limit', {
         _user_id: userId,
         _limit_type: 'images',
-        _free_limit: FREE_IMAGE_LIMIT,
+        _free_limit: imageLimit, // Using their tier's limit
         _premium_limit: PREMIUM_IMAGE_LIMIT
       });
 
@@ -50,7 +72,7 @@ serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             error: "Image limit reached",
-            message: `You've reached your daily limit of ${FREE_IMAGE_LIMIT} AI images. Upgrade to Premium for ${PREMIUM_IMAGE_LIMIT} images/day.`
+            message: `You've reached your daily limit of ${imageLimit} AI images.`
           }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );

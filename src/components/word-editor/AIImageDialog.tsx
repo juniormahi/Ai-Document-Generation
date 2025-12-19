@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Loader2, Sparkles, Image as ImageIcon, AlertTriangle } from 'lucide-react';
+import { Loader2, Sparkles, Image as ImageIcon, AlertTriangle, Lock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { getAuthHeaders } from '@/hooks/useFirebaseAuth';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,9 +37,33 @@ export function AIImageDialog({ open, onOpenChange, onImageGenerated }: AIImageD
   const [isGenerating, setIsGenerating] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [limitReached, setLimitReached] = useState(false);
+  const [isPaidUser, setIsPaidUser] = useState<boolean | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Check if user has paid subscription
+  useEffect(() => {
+    const checkSubscription = async () => {
+      if (!user?.uid) {
+        setIsPaidUser(false);
+        return;
+      }
+
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('plan_type, status')
+        .eq('user_id', user.uid)
+        .eq('status', 'active')
+        .single();
+
+      setIsPaidUser(!!subscription);
+    };
+
+    if (open) {
+      checkSubscription();
+    }
+  }, [user?.uid, open]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -67,12 +91,21 @@ export function AIImageDialog({ open, onOpenChange, onImageGenerated }: AIImageD
       });
 
       if (error) {
-        // Check if it's a limit error
+        // Check if it's a subscription/limit error
+        if (error.message?.includes('Subscription required') || error.context?.status === 403) {
+          setIsPaidUser(false);
+          toast({
+            title: "Subscription required",
+            description: "AI Image Generation is available for paid subscribers only.",
+            variant: "destructive",
+          });
+          return;
+        }
         if (error.message?.includes('limit') || error.context?.status === 429) {
           setLimitReached(true);
           toast({
             title: "Image limit reached",
-            description: "You've used all your free AI images. Upgrade for more!",
+            description: "You've reached your daily image generation limit.",
             variant: "destructive",
           });
           return;
@@ -81,11 +114,20 @@ export function AIImageDialog({ open, onOpenChange, onImageGenerated }: AIImageD
       }
       
       if (data?.error) {
+        if (data.error === "Subscription required") {
+          setIsPaidUser(false);
+          toast({
+            title: "Subscription required",
+            description: data.message || "Upgrade to unlock AI image generation",
+            variant: "destructive",
+          });
+          return;
+        }
         if (data.error === "Image limit reached") {
           setLimitReached(true);
           toast({
             title: "Image limit reached",
-            description: data.message || "Upgrade to Premium for more images",
+            description: data.message || "You've reached your daily limit",
             variant: "destructive",
           });
           return;
@@ -172,16 +214,24 @@ export function AIImageDialog({ open, onOpenChange, onImageGenerated }: AIImageD
 
           {/* Preview Area */}
           <div className="border-2 border-dashed border-border rounded-lg p-4 min-h-[200px] flex items-center justify-center bg-muted/30">
-            {limitReached ? (
+            {isPaidUser === false ? (
+              <div className="flex flex-col items-center gap-3 text-center p-4">
+                <Lock className="h-10 w-10 text-primary" />
+                <p className="font-medium">Premium Feature</p>
+                <p className="text-sm text-muted-foreground">
+                  AI Image Generation is available for Standard and Premium subscribers only.
+                </p>
+                <Button onClick={() => navigate('/subscription')} className="mt-2">
+                  Upgrade Now
+                </Button>
+              </div>
+            ) : limitReached ? (
               <div className="flex flex-col items-center gap-3 text-center p-4">
                 <AlertTriangle className="h-10 w-10 text-orange-500" />
                 <p className="font-medium">Image Limit Reached</p>
                 <p className="text-sm text-muted-foreground">
-                  Free users can generate 4 AI images per day. Upgrade to Premium for 100 images/day!
+                  You've reached your daily image limit. Try again tomorrow!
                 </p>
-                <Button onClick={() => navigate('/subscription')} className="mt-2">
-                  Upgrade to Premium
-                </Button>
               </div>
             ) : isGenerating ? (
               <div className="flex flex-col items-center gap-3">
@@ -198,7 +248,7 @@ export function AIImageDialog({ open, onOpenChange, onImageGenerated }: AIImageD
               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                 <ImageIcon className="h-12 w-12" />
                 <p className="text-sm">Image preview will appear here</p>
-                <p className="text-xs">Free: 4 images/day • Premium: 100/day</p>
+                <p className="text-xs">Standard: 50/day • Premium: 100/day</p>
               </div>
             )}
           </div>
@@ -207,7 +257,11 @@ export function AIImageDialog({ open, onOpenChange, onImageGenerated }: AIImageD
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            {previewImage ? (
+            {isPaidUser === false ? (
+              <Button onClick={() => navigate('/subscription')}>
+                Upgrade to Generate
+              </Button>
+            ) : previewImage ? (
               <>
                 <Button variant="outline" onClick={handleGenerate} disabled={isGenerating}>
                   Regenerate
