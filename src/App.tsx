@@ -17,6 +17,9 @@ import Tools from "./pages/Tools";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Blog from "./pages/Blog";
+import FAQ from "./pages/FAQ";
+import Contact from "./pages/Contact";
+import About from "./pages/About";
 import DocumentCreator from "./pages/tools/DocumentCreator";
 import PresentationMaker from "./pages/tools/PresentationMaker";
 import AIWriter from "./pages/tools/AIWriter";
@@ -49,6 +52,9 @@ function AnimatedRoutes() {
         <Route path="/terms" element={<PageTransition><Terms /></PageTransition>} />
         <Route path="/privacy" element={<PageTransition><Privacy /></PageTransition>} />
         <Route path="/blog" element={<PageTransition><Blog /></PageTransition>} />
+        <Route path="/faq" element={<PageTransition><FAQ /></PageTransition>} />
+        <Route path="/contact" element={<PageTransition><Contact /></PageTransition>} />
+        <Route path="/about" element={<PageTransition><About /></PageTransition>} />
         
         {/* Main dashboard */}
         <Route path="/dashboard" element={<PageTransition><Dashboard /></PageTransition>} />
