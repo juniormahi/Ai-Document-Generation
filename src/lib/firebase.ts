@@ -15,11 +15,46 @@ const firebaseConfig = {
   measurementId: "G-ZCJS5Z3CJP"
 };
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-export const storage = getStorage(app);
-export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+let app: ReturnType<typeof initializeApp>;
+let authInstance: ReturnType<typeof getAuth>;
+let dbInstance: ReturnType<typeof getFirestore>;
+let storageInstance: ReturnType<typeof getStorage>;
+
+const getApp = () => {
+  if (!app) {
+    app = initializeApp(firebaseConfig);
+  }
+  return app;
+};
+
+export const auth = (() => {
+  if (!authInstance) {
+    authInstance = getAuth(getApp());
+  }
+  return authInstance;
+})();
+
+export const db = (() => {
+  if (!dbInstance) {
+    dbInstance = getFirestore(getApp());
+  }
+  return dbInstance;
+})();
+
+export const storage = (() => {
+  if (!storageInstance) {
+    storageInstance = getStorage(getApp());
+  }
+  return storageInstance;
+})();
+
+// Lazy load analytics to prevent initialization issues
+export const getAnalyticsInstance = () => {
+  if (typeof window !== 'undefined') {
+    return getAnalytics(getApp());
+  }
+  return null;
+};
 
 // Configure Google provider with Drive/Docs scopes
 export const googleProvider = new GoogleAuthProvider();
