@@ -6,10 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { getAuthHeaders } from "@/hooks/useFirebaseAuth";
+import { AIImageLibrary } from "@/components/AIImageLibrary";
 import { 
   ImageIcon, 
   Sparkles, 
@@ -20,7 +22,8 @@ import {
   Palette,
   Grid3X3,
   Edit,
-  Save
+  Library,
+  Zap
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -29,6 +32,10 @@ import { Slider } from "@/components/ui/slider";
 const styles = [
   { value: "realistic", label: "Realistic", icon: "📷" },
   { value: "artistic", label: "Artistic", icon: "🎨" },
+  { value: "anime", label: "Anime", icon: "🎎" },
+  { value: "watercolor", label: "Watercolor", icon: "💧" },
+  { value: "oil-painting", label: "Oil Painting", icon: "🖼️" },
+  { value: "cyberpunk", label: "Cyberpunk", icon: "🌆" },
   { value: "minimalist", label: "Minimalist", icon: "◻️" },
   { value: "cartoon", label: "Cartoon", icon: "🎭" },
   { value: "3d", label: "3D Render", icon: "🧊" },
@@ -55,7 +62,11 @@ export default function ImageGenerator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
   const [isPremium, setIsPremium] = useState(false);
-  const [checkingPremium, setCheckingPremium] = useState(true);
+  const [checkingStatus, setCheckingStatus] = useState(true);
+  
+  // Credits state
+  const [creditsUsed, setCreditsUsed] = useState(0);
+  const [creditLimit, setCreditLimit] = useState(10);
   
   // Edit tab state
   const [editImageUrl, setEditImageUrl] = useState("");
@@ -67,31 +78,43 @@ export default function ImageGenerator() {
   const { user } = useAuth();
 
   useEffect(() => {
-    const checkPremiumStatus = async () => {
+    const checkStatus = async () => {
       if (!user) {
-        setIsPremium(false);
-        setCheckingPremium(false);
+        setCheckingStatus(false);
         return;
       }
       
       try {
-        const { data } = await supabase
+        // Check premium status
+        const { data: subData } = await supabase
           .from('subscriptions')
           .select('status')
           .eq('user_id', user.uid)
           .eq('status', 'active')
           .maybeSingle();
         
-        setIsPremium(!!data);
+        const premium = !!subData;
+        setIsPremium(premium);
+        setCreditLimit(premium ? 100 : 10);
+
+        // Check today's usage
+        const today = new Date().toISOString().split('T')[0];
+        const { data: usageData } = await supabase
+          .from('usage_tracking')
+          .select('images_generated')
+          .eq('user_id', user.uid)
+          .eq('date', today)
+          .single();
+
+        setCreditsUsed(usageData?.images_generated || 0);
       } catch (error) {
-        console.error('Error checking premium status:', error);
-        setIsPremium(false);
+        console.error('Error checking status:', error);
       } finally {
-        setCheckingPremium(false);
+        setCheckingStatus(false);
       }
     };
 
-    checkPremiumStatus();
+    checkStatus();
   }, [user]);
 
   const handleGenerate = async () => {
@@ -113,6 +136,15 @@ export default function ImageGenerator() {
       return;
     }
 
+    if (creditsUsed >= creditLimit) {
+      toast({
+        title: "Daily limit reached",
+        description: `You've used all ${creditLimit} image credits for today.${!isPremium ? ' Upgrade to Pro for 100 daily credits!' : ' Credits reset tomorrow.'}`,
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsGenerating(true);
     setGeneratedImages([]);
 
@@ -124,10 +156,10 @@ export default function ImageGenerator() {
       });
 
       if (error) {
-        if (error.message?.includes('403') || error.message?.includes('Premium')) {
+        if (error.message?.includes('403') || error.message?.includes('Credit')) {
           toast({
-            title: "Premium Feature",
-            description: "AI Image Generation is available for premium users only.",
+            title: "Credit Limit Reached",
+            description: data?.message || "You've used all your image credits for today.",
             variant: "destructive",
           });
           return;
@@ -137,9 +169,10 @@ export default function ImageGenerator() {
 
       if (data?.images && data.images.length > 0) {
         setGeneratedImages(data.images);
+        setCreditsUsed(data.creditsUsed || creditsUsed + data.images.length);
         toast({
           title: "Images Generated!",
-          description: `${data.images.length} image(s) created and saved to gallery.`,
+          description: `${data.images.length} image(s) created. ${data.creditsRemaining} credits remaining today.`,
         });
       }
     } catch (error: any) {
@@ -187,6 +220,7 @@ export default function ImageGenerator() {
 
       if (data?.imageUrl) {
         setEditedImage(data.imageUrl);
+        setCreditsUsed(prev => prev + 1);
         toast({
           title: "Image Edited!",
           description: "Your edited image has been saved to gallery.",
@@ -230,7 +264,17 @@ export default function ImageGenerator() {
     });
   };
 
-  if (checkingPremium) {
+  const handleUsePrompt = (promptText: string, styleValue: string) => {
+    setPrompt(promptText);
+    setStyle(styleValue);
+    setActiveTab("generate");
+    toast({
+      title: "Prompt Loaded",
+      description: "You can now generate images with this prompt.",
+    });
+  };
+
+  if (checkingStatus) {
     return (
       <DashboardLayout>
         <div className="flex justify-center py-12">
@@ -240,12 +284,14 @@ export default function ImageGenerator() {
     );
   }
 
+  const creditsRemaining = creditLimit - creditsUsed;
+
   return (
     <DashboardLayout>
       <SEO
         title="AI Image Generator - Create Stunning Images | mydocmaker"
-        description="Generate beautiful AI images from text descriptions. Create realistic, artistic, or stylized images in seconds."
-        keywords="ai image generator, text to image, ai art, image creation"
+        description="Generate beautiful AI images from text descriptions. Create realistic, artistic, anime, watercolor, oil painting, cyberpunk and more styles in seconds."
+        keywords="ai image generator, text to image, ai art, image creation, anime art, cyberpunk art"
         canonical="/tools/image-generator"
       />
 
@@ -264,25 +310,59 @@ export default function ImageGenerator() {
           </p>
         </motion.div>
 
-        {!isPremium ? (
+        {/* Credits Display */}
+        {user && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <Card className="max-w-md mx-auto">
+              <CardContent className="pt-4 pb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-yellow-500" />
+                    Daily Credits
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {creditsUsed} / {creditLimit} used
+                  </span>
+                </div>
+                <Progress value={(creditsUsed / creditLimit) * 100} className="h-2" />
+                <div className="flex justify-between items-center mt-2">
+                  <p className="text-xs text-muted-foreground">
+                    {creditsRemaining} credits remaining today
+                  </p>
+                  {!isPremium && (
+                    <Link to="/dashboard/subscription" className="text-xs text-primary hover:underline flex items-center gap-1">
+                      <Crown className="w-3 h-3" />
+                      Upgrade for 100/day
+                    </Link>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {!user ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
             <Card className="max-w-lg mx-auto text-center">
               <CardContent className="pt-8 pb-8">
-                <div className="w-16 h-16 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto mb-4">
-                  <Crown className="w-8 h-8 text-amber-500" />
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                  <ImageIcon className="w-8 h-8 text-primary" />
                 </div>
-                <h2 className="text-2xl font-bold mb-2">Premium Feature</h2>
+                <h2 className="text-2xl font-bold mb-2">Sign In to Generate</h2>
                 <p className="text-muted-foreground mb-6">
-                  AI Image Generation is available exclusively for premium subscribers. 
-                  Upgrade now to create unlimited AI images!
+                  Create an account to get 10 free image credits every day!
                 </p>
-                <Link to="/dashboard/subscription">
-                  <Button className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600">
-                    <Crown className="w-4 h-4 mr-2" />
-                    Upgrade to Premium
+                <Link to="/login">
+                  <Button className="bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700">
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Sign In to Start
                   </Button>
                 </Link>
               </CardContent>
@@ -290,7 +370,7 @@ export default function ImageGenerator() {
           </motion.div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-6">
+            <TabsList className="grid w-full max-w-lg mx-auto grid-cols-3 mb-6">
               <TabsTrigger value="generate" className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4" />
                 Generate
@@ -298,6 +378,10 @@ export default function ImageGenerator() {
               <TabsTrigger value="edit" className="flex items-center gap-2">
                 <Edit className="w-4 h-4" />
                 Edit
+              </TabsTrigger>
+              <TabsTrigger value="library" className="flex items-center gap-2">
+                <Library className="w-4 h-4" />
+                Library
               </TabsTrigger>
             </TabsList>
 
@@ -361,13 +445,13 @@ export default function ImageGenerator() {
                           className="w-full"
                         />
                         <p className="text-xs text-muted-foreground mt-1">
-                          Generate up to 4 variations at once
+                          Generate up to 4 variations ({count} credits)
                         </p>
                       </div>
 
                       <Button 
                         onClick={handleGenerate} 
-                        disabled={isGenerating || !prompt.trim()}
+                        disabled={isGenerating || !prompt.trim() || creditsUsed >= creditLimit}
                         className="w-full bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700"
                       >
                         {isGenerating ? (
@@ -375,10 +459,15 @@ export default function ImageGenerator() {
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                             Generating {count} image{count > 1 ? 's' : ''}...
                           </>
+                        ) : creditsUsed >= creditLimit ? (
+                          <>
+                            <Zap className="w-4 h-4 mr-2" />
+                            No Credits Remaining
+                          </>
                         ) : (
                           <>
                             <Sparkles className="w-4 h-4 mr-2" />
-                            Generate {count} Image{count > 1 ? 's' : ''}
+                            Generate {count} Image{count > 1 ? 's' : ''} ({count} credit{count > 1 ? 's' : ''})
                           </>
                         )}
                       </Button>
@@ -466,7 +555,6 @@ export default function ImageGenerator() {
 
             <TabsContent value="edit">
               <div className="grid lg:grid-cols-2 gap-6">
-                {/* Edit Input */}
                 <motion.div
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -475,49 +563,38 @@ export default function ImageGenerator() {
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Edit className="w-5 h-5" />
-                        Edit Image with AI
+                        Edit an Image
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div>
-                        <label className="text-sm font-medium mb-2 block">Image URL</label>
+                        <label className="text-sm font-medium mb-2 block">
+                          Image URL or base64
+                        </label>
                         <Textarea
                           value={editImageUrl}
                           onChange={(e) => setEditImageUrl(e.target.value)}
-                          placeholder="Paste the image URL here (or generate an image first)"
+                          placeholder="Paste an image URL or data:image/... base64 string"
                           className="min-h-[80px] resize-none"
                         />
                       </div>
 
-                      {editImageUrl && (
-                        <div className="aspect-video rounded-lg overflow-hidden bg-muted">
-                          <img
-                            src={editImageUrl}
-                            alt="Original"
-                            className="w-full h-full object-contain"
-                            onError={() => toast({
-                              title: "Invalid URL",
-                              description: "Could not load image from URL",
-                              variant: "destructive"
-                            })}
-                          />
-                        </div>
-                      )}
-
                       <div>
-                        <label className="text-sm font-medium mb-2 block">Edit Instructions</label>
+                        <label className="text-sm font-medium mb-2 block">
+                          Edit instructions
+                        </label>
                         <Textarea
                           value={editPrompt}
                           onChange={(e) => setEditPrompt(e.target.value)}
-                          placeholder="Make it rainy, change the sky to sunset, add snow..."
+                          placeholder="Make the sky purple, add a rainbow, change the style to watercolor..."
                           className="min-h-[100px] resize-none"
                         />
                       </div>
 
                       <Button 
                         onClick={handleEdit} 
-                        disabled={isEditing || !editImageUrl.trim() || !editPrompt.trim()}
-                        className="w-full bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
+                        disabled={isEditing || !editImageUrl.trim() || !editPrompt.trim() || creditsUsed >= creditLimit}
+                        className="w-full"
                       >
                         {isEditing ? (
                           <>
@@ -526,8 +603,8 @@ export default function ImageGenerator() {
                           </>
                         ) : (
                           <>
-                            <Edit className="w-4 h-4 mr-2" />
-                            Apply Edit
+                            <Wand2 className="w-4 h-4 mr-2" />
+                            Edit Image (1 credit)
                           </>
                         )}
                       </Button>
@@ -535,7 +612,6 @@ export default function ImageGenerator() {
                   </Card>
                 </motion.div>
 
-                {/* Edit Output */}
                 <motion.div
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
@@ -543,46 +619,33 @@ export default function ImageGenerator() {
                   <Card className="h-full">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
-                        <Save className="w-5 h-5" />
-                        Edited Image
+                        <ImageIcon className="w-5 h-5" />
+                        Edited Result
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
                       {isEditing ? (
                         <div className="aspect-square bg-muted rounded-lg flex flex-col items-center justify-center">
                           <Loader2 className="w-12 h-12 animate-spin text-muted-foreground mb-4" />
-                          <p className="text-muted-foreground">Applying your edits...</p>
+                          <p className="text-muted-foreground">Editing your image...</p>
                         </div>
                       ) : editedImage ? (
                         <div className="space-y-4">
                           <div className="aspect-square rounded-lg overflow-hidden bg-muted">
                             <img
                               src={editedImage}
-                              alt="Edited"
+                              alt="Edited result"
                               className="w-full h-full object-cover"
                             />
                           </div>
-                          <div className="flex gap-2">
-                            <Button 
-                              onClick={() => handleDownload(editedImage, 0)} 
-                              className="flex-1" 
-                              variant="outline"
-                            >
-                              <Download className="w-4 h-4 mr-2" />
-                              Download
-                            </Button>
-                            <Button 
-                              onClick={() => {
-                                setEditImageUrl(editedImage);
-                                setEditedImage(null);
-                              }} 
-                              className="flex-1" 
-                              variant="outline"
-                            >
-                              <Edit className="w-4 h-4 mr-2" />
-                              Edit Again
-                            </Button>
-                          </div>
+                          <Button
+                            onClick={() => handleDownload(editedImage, 0)}
+                            className="w-full"
+                            variant="outline"
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Download Edited Image
+                          </Button>
                         </div>
                       ) : (
                         <div className="aspect-square bg-muted/50 rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-muted-foreground/20">
@@ -594,6 +657,10 @@ export default function ImageGenerator() {
                   </Card>
                 </motion.div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="library">
+              <AIImageLibrary onUsePrompt={handleUsePrompt} />
             </TabsContent>
           </Tabs>
         )}

@@ -7,6 +7,10 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, x-firebase-token, apikey, content-type",
 };
 
+// Daily credit limits
+const FREE_DAILY_IMAGE_CREDITS = 10;
+const PRO_DAILY_IMAGE_CREDITS = 100;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -22,23 +26,38 @@ serve(async (req) => {
 
     const { userId, isPremium } = auth;
 
-    if (!isPremium) {
-      console.log(`User ${userId} is not premium, denying image generation`);
-      return new Response(
-        JSON.stringify({ 
-          error: "Premium feature", 
-          message: "AI Image Generation is a premium feature. Please upgrade to access this tool." 
-        }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     
     if (!LOVABLE_API_KEY) {
       throw new Error("LOVABLE_API_KEY is not configured");
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Check daily image credits
+    const today = new Date().toISOString().split('T')[0];
+    const { data: usageData } = await supabase
+      .from('usage_tracking')
+      .select('images_generated')
+      .eq('user_id', userId)
+      .eq('date', today)
+      .single();
+
+    const imagesGeneratedToday = usageData?.images_generated || 0;
+    const dailyLimit = isPremium ? PRO_DAILY_IMAGE_CREDITS : FREE_DAILY_IMAGE_CREDITS;
+
+    if (imagesGeneratedToday >= dailyLimit) {
+      return new Response(
+        JSON.stringify({ 
+          error: "Daily credit limit reached", 
+          message: `You've used all ${dailyLimit} image credits for today. ${!isPremium ? 'Upgrade to Pro for 100 daily credits!' : 'Credits reset tomorrow.'}`,
+          creditsUsed: imagesGeneratedToday,
+          creditLimit: dailyLimit
+        }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const { prompt, style, count = 1, saveToGallery = true } = await req.json();
@@ -50,31 +69,48 @@ serve(async (req) => {
       );
     }
 
-    const batchCount = Math.min(Math.max(1, count), 4); // Max 4 images at once
+    const batchCount = Math.min(Math.max(1, count), 4);
     
-    // Enhance prompt based on style
+    // Check if we have enough credits for batch
+    if (imagesGeneratedToday + batchCount > dailyLimit) {
+      const remaining = dailyLimit - imagesGeneratedToday;
+      return new Response(
+        JSON.stringify({ 
+          error: "Not enough credits", 
+          message: `You only have ${remaining} image credit(s) remaining today.`,
+          creditsUsed: imagesGeneratedToday,
+          creditLimit: dailyLimit
+        }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    // Enhanced style prompts
     let enhancedPrompt = prompt;
     if (style) {
       const stylePrompts: Record<string, string> = {
-        "realistic": `Ultra realistic, high quality photograph: ${prompt}. 8K resolution, professional photography, sharp focus`,
+        "realistic": `Ultra realistic, high quality photograph: ${prompt}. 8K resolution, professional photography, sharp focus, photorealistic`,
         "artistic": `Artistic digital painting: ${prompt}. Vibrant colors, creative composition, masterpiece quality`,
-        "minimalist": `Minimalist design: ${prompt}. Clean, simple, elegant, modern aesthetic`,
-        "cartoon": `Cartoon style illustration: ${prompt}. Colorful, fun, animated style`,
-        "3d": `3D rendered image: ${prompt}. High quality 3D rendering, realistic lighting, detailed textures`,
-        "vintage": `Vintage style: ${prompt}. Retro aesthetic, nostalgic feel, classic look`,
+        "anime": `Anime style illustration: ${prompt}. Japanese anime art style, vibrant colors, detailed character design, studio quality anime artwork`,
+        "watercolor": `Watercolor painting: ${prompt}. Soft flowing colors, beautiful watercolor technique, artistic brushstrokes, traditional watercolor medium`,
+        "oil-painting": `Classical oil painting: ${prompt}. Rich oil paint textures, museum quality, reminiscent of old masters, detailed brushwork, classical art style`,
+        "cyberpunk": `Cyberpunk style: ${prompt}. Neon lights, futuristic dystopian cityscape, high tech low life, glowing elements, purple and cyan color palette, blade runner aesthetic`,
+        "minimalist": `Minimalist design: ${prompt}. Clean, simple, elegant, modern aesthetic, negative space`,
+        "cartoon": `Cartoon style illustration: ${prompt}. Colorful, fun, animated style, bold outlines`,
+        "3d": `3D rendered image: ${prompt}. High quality 3D rendering, realistic lighting, detailed textures, octane render`,
+        "vintage": `Vintage style: ${prompt}. Retro aesthetic, nostalgic feel, classic look, aged appearance, film grain`,
       };
       enhancedPrompt = stylePrompts[style] || prompt;
     }
 
-    console.log(`Generating ${batchCount} image(s) for user ${userId}, prompt: ${enhancedPrompt.substring(0, 100)}...`);
+    console.log(`Generating ${batchCount} image(s) for user ${userId}, credits: ${imagesGeneratedToday}/${dailyLimit}`);
 
     const generatedImages: Array<{ imageUrl: string; description: string }> = [];
     const errors: string[] = [];
 
-    // Generate images in parallel
+    // Generate images in parallel using nano-banana model
     const generatePromises = Array(batchCount).fill(null).map(async (_, index) => {
       try {
-        // Add slight variation to prompt for different results
         const variedPrompt = batchCount > 1 
           ? `${enhancedPrompt}. Variation ${index + 1}, unique composition.`
           : enhancedPrompt;
@@ -86,7 +122,7 @@ serve(async (req) => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash-image-preview",
+            model: "google/gemini-2.5-flash-image-preview", // nano-banana model
             messages: [{ role: "user", content: variedPrompt }],
             modalities: ["image", "text"]
           }),
@@ -95,6 +131,9 @@ serve(async (req) => {
         if (!response.ok) {
           if (response.status === 429) {
             throw new Error("Rate limit exceeded");
+          }
+          if (response.status === 402) {
+            throw new Error("Payment required - please add credits");
           }
           throw new Error(`API error: ${response.status}`);
         }
@@ -127,10 +166,25 @@ serve(async (req) => {
       throw new Error(errors[0] || "Failed to generate any images");
     }
 
+    // Update usage tracking
+    if (usageData) {
+      await supabase
+        .from('usage_tracking')
+        .update({ images_generated: imagesGeneratedToday + generatedImages.length })
+        .eq('user_id', userId)
+        .eq('date', today);
+    } else {
+      await supabase
+        .from('usage_tracking')
+        .insert({
+          user_id: userId,
+          date: today,
+          images_generated: generatedImages.length
+        });
+    }
+
     // Save to gallery if requested
     if (saveToGallery && generatedImages.length > 0) {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-      
       const galleryEntries = generatedImages.map((img, index) => ({
         user_id: userId,
         title: `AI Image ${batchCount > 1 ? `(${index + 1}/${generatedImages.length})` : ''} - ${prompt.substring(0, 50)}`,
@@ -159,6 +213,9 @@ serve(async (req) => {
       JSON.stringify({
         images: generatedImages,
         savedToGallery: saveToGallery,
+        creditsUsed: imagesGeneratedToday + generatedImages.length,
+        creditLimit: dailyLimit,
+        creditsRemaining: dailyLimit - (imagesGeneratedToday + generatedImages.length),
         errors: errors.length > 0 ? errors : undefined
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
