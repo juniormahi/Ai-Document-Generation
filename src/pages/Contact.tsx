@@ -9,10 +9,22 @@ import { Label } from "@/components/ui/label";
 import { ArrowLeft, Mail, Phone, MessageSquare, Clock, Send, Headphones } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { z } from "zod";
+
+const contactSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
+  email: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters"),
+  subject: z.string().trim().min(1, "Subject is required").max(200, "Subject must be less than 200 characters"),
+  message: z.string().trim().min(10, "Message must be at least 10 characters").max(2000, "Message must be less than 2000 characters"),
+});
+
+type ContactForm = z.infer<typeof contactSchema>;
 
 export default function Contact() {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [errors, setErrors] = useState<Partial<Record<keyof ContactForm, string>>>({});
+  const [formData, setFormData] = useState<ContactForm>({
     name: "",
     email: "",
     subject: "",
@@ -21,14 +33,37 @@ export default function Contact() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
+
+    const result = contactSchema.safeParse(formData);
+    if (!result.success) {
+      const fieldErrors: Partial<Record<keyof ContactForm, string>> = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          fieldErrors[err.path[0] as keyof ContactForm] = err.message;
+        }
+      });
+      setErrors(fieldErrors);
+      return;
+    }
+
     setIsSubmitting(true);
     
-    // Simulate form submission
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    
-    toast.success("Message sent successfully! We'll get back to you soon.");
-    setFormData({ name: "", email: "", subject: "", message: "" });
-    setIsSubmitting(false);
+    try {
+      const { data, error } = await supabase.functions.invoke("contact-form", {
+        body: formData,
+      });
+
+      if (error) throw error;
+
+      toast.success("Message sent successfully! We'll get back to you soon.");
+      setFormData({ name: "", email: "", subject: "", message: "" });
+    } catch (error: any) {
+      console.error("Error submitting form:", error);
+      toast.error(error.message || "Failed to send message. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const contactInfo = [
@@ -137,8 +172,19 @@ export default function Contact() {
                 className="bg-card border border-border rounded-xl p-6 hover:border-primary/50 transition-colors"
               >
                 {item.href ? (
-                  <Link to={item.href.startsWith('/') ? item.href : '#'}>
-                    <a href={item.href.startsWith('/') ? undefined : item.href} className="flex items-start gap-4">
+                  item.href.startsWith('/') ? (
+                    <Link to={item.href} className="flex items-start gap-4">
+                      <div className="p-3 bg-primary/10 rounded-lg">
+                        <item.icon className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-semibold mb-1">{item.title}</h3>
+                        <p className="text-foreground">{item.description}</p>
+                        <p className="text-sm text-muted-foreground mt-1">{item.detail}</p>
+                      </div>
+                    </Link>
+                  ) : (
+                    <a href={item.href} className="flex items-start gap-4">
                       <div className="p-3 bg-primary/10 rounded-lg">
                         <item.icon className="h-6 w-6 text-primary" />
                       </div>
@@ -148,7 +194,7 @@ export default function Contact() {
                         <p className="text-sm text-muted-foreground mt-1">{item.detail}</p>
                       </div>
                     </a>
-                  </Link>
+                  )
                 ) : (
                   <div className="flex items-start gap-4">
                     <div className="p-3 bg-primary/10 rounded-lg">
@@ -183,8 +229,9 @@ export default function Contact() {
                       placeholder="Your name"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      required
+                      className={errors.name ? "border-destructive" : ""}
                     />
+                    {errors.name && <p className="text-sm text-destructive">{errors.name}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
@@ -194,8 +241,9 @@ export default function Contact() {
                       placeholder="your@email.com"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      required
+                      className={errors.email ? "border-destructive" : ""}
                     />
+                    {errors.email && <p className="text-sm text-destructive">{errors.email}</p>}
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -205,8 +253,9 @@ export default function Contact() {
                     placeholder="How can we help?"
                     value={formData.subject}
                     onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                    required
+                    className={errors.subject ? "border-destructive" : ""}
                   />
+                  {errors.subject && <p className="text-sm text-destructive">{errors.subject}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="message">Message</Label>
@@ -216,8 +265,16 @@ export default function Contact() {
                     rows={6}
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                    required
+                    className={errors.message ? "border-destructive" : ""}
                   />
+                  <div className="flex justify-between text-sm text-muted-foreground">
+                    {errors.message ? (
+                      <p className="text-destructive">{errors.message}</p>
+                    ) : (
+                      <span>Minimum 10 characters</span>
+                    )}
+                    <span>{formData.message.length}/2000</span>
+                  </div>
                 </div>
                 <Button type="submit" size="lg" className="w-full gap-2" disabled={isSubmitting}>
                   {isSubmitting ? (
