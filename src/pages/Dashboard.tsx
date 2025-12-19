@@ -13,6 +13,9 @@ import {
   PenTool,
   ArrowRight,
   Upload,
+  ImageIcon,
+  Video,
+  Crown,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -23,6 +26,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 const allTools = [
+  {
+    icon: ImageIcon,
+    title: "AI Image Generator",
+    description: "Create stunning images from text descriptions",
+    link: "/tools/image-generator",
+    color: "bg-gradient-to-br from-pink-500 to-purple-600",
+    badge: "PRO",
+    badgeColor: "bg-amber-500",
+  },
+  {
+    icon: Video,
+    title: "AI Video Generator",
+    description: "Transform images into animated videos",
+    link: "/tools/video-generator",
+    color: "bg-gradient-to-br from-red-500 to-orange-500",
+    badge: "NEW",
+    badgeColor: "bg-green-500",
+  },
   {
     icon: FileText,
     title: "Document Creator",
@@ -78,13 +99,6 @@ const allTools = [
     description: "Create engaging stories and narratives",
     link: "/tools/story-generator",
     color: "bg-pink-500",
-  },
-  {
-    icon: PenTool,
-    title: "AI Writer",
-    description: "Write articles, essays, and more",
-    link: "/tools/writer",
-    color: "bg-violet-500",
   },
 ];
 
@@ -195,7 +209,7 @@ export default function Dashboard() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {allTools.map((tool, index) => (
               <motion.div
                 key={tool.title}
@@ -205,7 +219,13 @@ export default function Dashboard() {
                 whileHover={{ y: -5 }}
               >
                 <Link to={tool.link}>
-                  <Card className="h-full hover:shadow-lg transition-all cursor-pointer group border hover:border-primary/30">
+                  <Card className={`h-full hover:shadow-lg transition-all cursor-pointer group border hover:border-primary/30 relative overflow-hidden ${index < 2 ? 'ring-2 ring-primary/20' : ''}`}>
+                    {(tool as any).badge && (
+                      <div className={`absolute top-2 right-2 ${(tool as any).badgeColor} text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1`}>
+                        {(tool as any).badge === 'PRO' && <Crown className="h-3 w-3" />}
+                        {(tool as any).badge}
+                      </div>
+                    )}
                     <CardContent className="p-4 flex flex-col items-center text-center">
                       <div className={`w-12 h-12 rounded-xl ${tool.color} flex items-center justify-center mb-3 shadow-md group-hover:scale-110 transition-transform`}>
                         <tool.icon className="h-6 w-6 text-white" />
