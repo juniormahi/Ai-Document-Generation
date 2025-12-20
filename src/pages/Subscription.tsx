@@ -81,8 +81,8 @@ export default function Subscription() {
       if (action === 'portal' && response.data?.url) {
         try {
           const url = new URL(response.data.url);
-          const allowedHosts = ['lemonsqueezy.com', 'billing.lemonsqueezy.com', 'mydocmaker.lemonsqueezy.com', 'mydocmaker.com'];
-          if (allowedHosts.some(host => url.hostname.endsWith(host) || url.hostname.includes('lemonsqueezy'))) {
+          const allowedHosts = ['stripe.com', 'billing.stripe.com', 'checkout.stripe.com', 'mydocmaker.com'];
+          if (allowedHosts.some(host => url.hostname.endsWith(host) || url.hostname.includes('stripe'))) {
             window.location.href = response.data.url;
           } else {
             throw new Error('Invalid redirect URL');
@@ -118,8 +118,8 @@ export default function Subscription() {
       if (response.data?.url) {
         try {
           const url = new URL(response.data.url);
-          const allowedHosts = ['lemonsqueezy.com', 'checkout.lemonsqueezy.com', 'mydocmaker.lemonsqueezy.com'];
-          if (allowedHosts.some(host => url.hostname.endsWith(host))) {
+          const allowedHosts = ['stripe.com', 'checkout.stripe.com'];
+          if (allowedHosts.some(host => url.hostname.endsWith(host) || url.hostname.includes('stripe'))) {
             window.location.href = response.data.url;
           } else {
             throw new Error('Invalid redirect URL');
