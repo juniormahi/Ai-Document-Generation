@@ -1,18 +1,22 @@
 import { useState, useRef, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Sparkles, Infinity, Brain, Upload, Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Send, Bot, Loader2, X, Sparkles, MessageSquare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ReactMarkdown from "react-markdown";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getAuthHeaders } from "@/hooks/useFirebaseAuth";
 
 type Message = { role: "user" | "assistant"; content: string };
 
-export const AIChatbox = () => {
+interface AIChatboxProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function AIChatbox({ isOpen, onClose }: AIChatboxProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -46,24 +50,25 @@ export const AIChatbox = () => {
         if (response.status === 429) {
           toast({
             title: "Rate Limit Exceeded",
-            description: "Please try again later or upgrade to premium for higher limits.",
+            description: "Please try again later or upgrade for higher limits.",
             variant: "destructive",
           });
           return;
         }
         if (response.status === 401) {
           toast({
-            title: "Authentication Required",
+            title: "Sign in required",
             description: "Please sign in to use the AI chat.",
             variant: "destructive",
           });
           return;
         }
-        throw new Error(`Request failed with status ${response.status}`);
+        throw new Error("Failed to get AI response");
       }
 
       const data = await response.json();
       const assistantContent = data?.choices?.[0]?.message?.content;
+      
       if (assistantContent) {
         setMessages((prev) => [...prev, { role: "assistant", content: assistantContent }]);
       }
@@ -109,132 +114,129 @@ export const AIChatbox = () => {
   };
 
   const suggestedPrompts = [
-    "Make the writing more concise and easy to read",
-    "Add emojis to this text to make it more engaging",
-    "Update the writing style and tone to be more professional",
+    "Help me write an email",
+    "Summarize a document",
+    "Generate content ideas",
   ];
 
+  if (!isOpen) return null;
+
   return (
-    <Card className="h-full flex flex-col border-2">
-      <CardHeader className="border-b">
-        <CardTitle className="text-2xl">What Can I Help You With?</CardTitle>
-      </CardHeader>
-      <CardContent className="flex-1 flex flex-col p-0">
-        {messages.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 space-y-6">
-            <div className="space-y-4 w-full max-w-md px-4 md:px-0">
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                <Infinity className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                <div>
-                  <p className="font-medium">Unlimited Chat</p>
-                  <p className="text-sm text-muted-foreground">No rate or usage limits. Free for everyone.</p>
-                </div>
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0, y: 20, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 20, scale: 0.95 }}
+        className="fixed bottom-20 right-4 z-50 w-[380px] max-w-[calc(100vw-2rem)]"
+      >
+        <Card className="shadow-xl border-border/50 overflow-hidden">
+          <CardHeader className="py-3 px-4 bg-gradient-to-r from-cyan-600 to-blue-500 text-white">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Bot className="w-5 h-5" />
+                <CardTitle className="text-base font-semibold">Doc AI Assistant</CardTitle>
               </div>
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                <Brain className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                <div>
-                  <p className="font-medium">Intelligent AI</p>
-                  <p className="text-sm text-muted-foreground">Even state-of-the-art AI models are free.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3 p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors">
-                <Upload className="w-5 h-5 text-primary mt-1 flex-shrink-0" />
-                <div>
-                  <p className="font-medium">File Uploads</p>
-                  <p className="text-sm text-muted-foreground">Support for uploads of 1000+ pages.</p>
-                </div>
-              </div>
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 text-white hover:bg-white/20"
+                onClick={onClose}
+              >
+                <X className="w-4 h-4" />
+              </Button>
             </div>
+          </CardHeader>
+          
+          <CardContent className="p-0 flex flex-col h-[400px]">
+            {messages.length === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-4 space-y-4">
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
+                  <MessageSquare className="h-6 w-6 text-white" />
+                </div>
+                <div className="text-center">
+                  <h3 className="text-sm font-semibold mb-1">How can I help?</h3>
+                  <p className="text-muted-foreground text-xs">Ask me anything about your documents</p>
+                </div>
 
-            <div className="w-full max-w-md space-y-3 px-4 md:px-0">
-              <p className="text-sm font-medium text-center">Try these prompts:</p>
-              {suggestedPrompts.map((prompt, index) => (
-                <Button
-                  key={index}
-                  variant="outline"
-                  className="w-full justify-start text-left h-auto py-3 px-4 text-xs md:text-sm"
-                  onClick={() => setInput(prompt)}
-                >
-                  <Sparkles className="w-4 h-4 mr-2 flex-shrink-0" />
-                  <span>{prompt}</span>
-                </Button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4">
-            <AnimatePresence>
-              {messages.map((message, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[85%] md:max-w-[80%] rounded-lg p-3 md:p-4 ${
-                      message.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted"
-                    }`}
+                <div className="w-full space-y-2">
+                  {suggestedPrompts.map((prompt, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      className="w-full justify-start text-left h-auto py-2 px-3 text-xs hover:bg-cyan-500/10 hover:border-cyan-500/30"
+                      onClick={() => setInput(prompt)}
+                    >
+                      <Sparkles className="w-3 h-3 mr-2 flex-shrink-0 text-cyan-500" />
+                      <span className="truncate">{prompt}</span>
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-y-auto p-3 space-y-3">
+                {messages.map((message, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                   >
-                    <div className="text-sm prose prose-sm max-w-none dark:prose-invert prose-headings:mt-2 prose-headings:mb-2 prose-p:my-1">
-                      <ReactMarkdown 
-                        components={{
-                          h1: ({node, ...props}) => <h1 className="text-2xl font-bold" {...props} />,
-                          h2: ({node, ...props}) => <h2 className="text-xl font-bold" {...props} />,
-                          h3: ({node, ...props}) => <h3 className="text-lg font-semibold" {...props} />,
-                          strong: ({node, ...props}) => <strong className="font-bold" {...props} />,
-                          em: ({node, ...props}) => <em className="italic" {...props} />,
-                          ul: ({node, ...props}) => <ul className="list-disc list-inside my-2" {...props} />,
-                          ol: ({node, ...props}) => <ol className="list-decimal list-inside my-2" {...props} />,
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
+                    <div
+                      className={`max-w-[85%] rounded-xl px-3 py-2 ${
+                        message.role === "user"
+                          ? "bg-gradient-to-r from-cyan-600 to-blue-500 text-white"
+                          : "bg-muted"
+                      }`}
+                    >
+                      <div className="text-xs prose prose-sm max-w-none dark:prose-invert">
+                        <ReactMarkdown>{message.content}</ReactMarkdown>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              ))}
-              {isLoading && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex justify-start"
-                >
-                  <div className="bg-muted rounded-lg p-4 flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span className="text-sm">Thinking...</span>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <div ref={messagesEndRef} />
-          </div>
-        )}
+                  </motion.div>
+                ))}
+                {isLoading && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex justify-start"
+                  >
+                    <div className="bg-muted rounded-xl px-3 py-2 flex items-center gap-2">
+                      <Loader2 className="w-3 h-3 animate-spin text-cyan-500" />
+                      <span className="text-xs">Thinking...</span>
+                    </div>
+                  </motion.div>
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
 
-        <div className="border-t p-3 md:p-4">
-          <div className="flex gap-2">
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Type a message or paste a screenshot..."
-              className="resize-none text-sm"
-              rows={3}
-              disabled={isLoading}
-            />
-            <Button
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              size="icon"
-              className="h-full flex-shrink-0"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+            {/* Input Area */}
+            <div className="border-t border-border/50 p-3 bg-background/50">
+              <div className="flex gap-2">
+                <Textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Type your message..."
+                  className="resize-none text-xs min-h-[36px] max-h-[80px]"
+                  rows={1}
+                  disabled={isLoading}
+                />
+                <Button
+                  onClick={handleSend}
+                  disabled={!input.trim() || isLoading}
+                  size="icon"
+                  className="h-9 w-9 shrink-0 bg-gradient-to-r from-cyan-600 to-blue-500 hover:from-cyan-700 hover:to-blue-600"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+    </AnimatePresence>
   );
-};
+}
+
+export default AIChatbox;
