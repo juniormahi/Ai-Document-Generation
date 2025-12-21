@@ -363,7 +363,7 @@ Response preferences:
         .substring(0, 50)
         .replace(/[^a-z0-9\s]/gi, '')
         .replace(/\s+/g, '_')
-        .toLowerCase();
+        .toLowerCase() || 'document';
 
       if (format === 'pdf') {
         toast({
@@ -372,15 +372,26 @@ Response preferences:
         });
 
         const blob = await buildPdfFromSchema(documentSchema);
-        const url = URL.createObjectURL(blob);
+        
+        // Create proper blob with explicit MIME type
+        const pdfBlob = new Blob([blob], { type: 'application/pdf' });
+        const url = URL.createObjectURL(pdfBlob);
+        
+        // Use more reliable download approach
         const a = document.createElement('a');
+        a.style.display = 'none';
         a.href = url;
         a.download = `${filename}.pdf`;
-        a.type = 'application/pdf';
         document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        
+        // Use setTimeout to ensure the link is in DOM before clicking
+        setTimeout(() => {
+          a.click();
+          setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }, 100);
+        }, 0);
 
         toast({
           title: "PDF Downloaded!",
@@ -395,13 +406,20 @@ Response preferences:
         type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
       });
       const url = URL.createObjectURL(properBlob);
+      
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
       a.download = `${filename}.docx`;
       document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      
+      setTimeout(() => {
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+      }, 0);
 
       toast({
         title: "Document Downloaded!",

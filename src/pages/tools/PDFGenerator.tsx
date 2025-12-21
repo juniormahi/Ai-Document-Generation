@@ -148,18 +148,33 @@ Response preferences:
     if (!generatedContent) return;
     
     try {
+      toast({
+        title: "Generating PDF...",
+        description: "Please wait while your PDF is being created",
+      });
+
       const sanitizedContent = DOMPurify.sanitize(generatedContent);
       const blob = await createPdfFromHtml(sanitizedContent, documentTitle);
       
+      // Create proper blob with explicit MIME type
+      const pdfBlob = new Blob([blob], { type: 'application/pdf' });
       const safeFilename = documentTitle.substring(0, 50).replace(/[^a-z0-9]/gi, '_') || 'document';
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(pdfBlob);
+      
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
       a.download = `${safeFilename}.pdf`;
       document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      
+      // Use setTimeout to ensure the link is in DOM before clicking
+      setTimeout(() => {
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+      }, 0);
 
       toast({
         title: "Downloaded!",
@@ -179,18 +194,33 @@ Response preferences:
     if (!generatedContent) return;
     
     try {
+      toast({
+        title: "Generating DOCX...",
+        description: "Please wait while your document is being created",
+      });
+
       const { createDocxFile } = await import("@/lib/fileGenerators");
       const blob = await createDocxFile(generatedContent, documentTitle, true);
       
+      const properBlob = new Blob([blob], { 
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' 
+      });
       const safeFilename = documentTitle.substring(0, 50).replace(/[^a-z0-9]/gi, '_') || 'document';
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(properBlob);
+      
       const a = document.createElement('a');
+      a.style.display = 'none';
       a.href = url;
       a.download = `${safeFilename}.docx`;
       document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      
+      setTimeout(() => {
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }, 100);
+      }, 0);
 
       toast({
         title: "Downloaded!",
