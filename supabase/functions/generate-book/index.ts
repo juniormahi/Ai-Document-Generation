@@ -113,52 +113,59 @@ Make the story engaging, educational, and suitable for children. Use vivid descr
     const pages: BookPage[] = parsedStory.pages || [];
     console.log(`Generated ${pages.length} pages of story`);
 
-    // Step 2: Generate images for each page using Nano Banana
+    // Step 2: Generate images for each page using Nano Banana (in parallel batches)
     const pagesWithImages: BookPage[] = [];
-
-    for (const page of pages) {
-      console.log(`Generating image for page ${page.pageNumber}...`);
+    const batchSize = 3; // Process 3 images at a time to avoid rate limiting
+    
+    for (let i = 0; i < pages.length; i += batchSize) {
+      const batch = pages.slice(i, i + batchSize);
+      console.log(`Generating images for pages ${i + 1} to ${Math.min(i + batchSize, pages.length)}...`);
       
-      const imagePrompt = `Children's book illustration, colorful and whimsical style, ${page.imagePrompt}. Style: Pixar-like, vibrant colors, child-friendly, warm lighting, no text in image.`;
+      const imagePromises = batch.map(async (page) => {
+        const imagePrompt = `Children's book illustration, colorful and whimsical style, ${page.imagePrompt}. Style: Pixar-like, vibrant colors, child-friendly, warm lighting, no text in image.`;
 
-      try {
-        const imageResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'google/gemini-2.5-flash-image-preview',
-            messages: [
-              { role: 'user', content: imagePrompt }
-            ],
-            modalities: ['image', 'text'],
-          }),
-        });
+        try {
+          const imageResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              model: 'google/gemini-2.5-flash-image-preview',
+              messages: [
+                { role: 'user', content: imagePrompt }
+              ],
+              modalities: ['image', 'text'],
+            }),
+          });
 
-        if (!imageResponse.ok) {
-          console.error(`Image generation failed for page ${page.pageNumber}`);
-          pagesWithImages.push({ ...page, imageBase64: undefined });
-          continue;
+          if (!imageResponse.ok) {
+            console.error(`Image generation failed for page ${page.pageNumber}`);
+            return { ...page, imageBase64: undefined };
+          }
+
+          const imageData = await imageResponse.json();
+          const imageUrl = imageData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+          
+          console.log(`Image generated for page ${page.pageNumber}`);
+          return {
+            ...page,
+            imageBase64: imageUrl || undefined,
+          };
+        } catch (imgError) {
+          console.error(`Error generating image for page ${page.pageNumber}:`, imgError);
+          return { ...page, imageBase64: undefined };
         }
+      });
 
-        const imageData = await imageResponse.json();
-        const imageUrl = imageData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-        
-        pagesWithImages.push({
-          ...page,
-          imageBase64: imageUrl || undefined,
-        });
-
-        console.log(`Image generated for page ${page.pageNumber}`);
-      } catch (imgError) {
-        console.error(`Error generating image for page ${page.pageNumber}:`, imgError);
-        pagesWithImages.push({ ...page, imageBase64: undefined });
+      const batchResults = await Promise.all(imagePromises);
+      pagesWithImages.push(...batchResults);
+      
+      // Small delay between batches to avoid rate limiting
+      if (i + batchSize < pages.length) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
-
-      // Small delay between image generations to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     // Track usage

@@ -155,8 +155,19 @@ export default function AIBookCreator() {
 
     try {
       const headers = await getAuthHeaders();
-      const { data, error } = await supabase.functions.invoke('generate-book', {
-        body: {
+      
+      // Use fetch with AbortController for longer timeout (5 minutes for book generation)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minute timeout
+      
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-book`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          ...headers,
+        },
+        body: JSON.stringify({
           bookDetails: {
             title,
             targetAge,
@@ -166,11 +177,19 @@ export default function AIBookCreator() {
             moral: moral || "being kind to others",
             pageCount: parseInt(pageCount),
           }
-        },
-        headers
+        }),
+        signal: controller.signal,
       });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to generate book');
+      }
+      
+      const data = await response.json();
 
-      if (error) throw error;
       if (!data?.book) throw new Error("No book generated");
 
       setGeneratedBook(data.book);
