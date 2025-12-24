@@ -241,6 +241,7 @@ export type Database = {
       }
       usage_tracking: {
         Row: {
+          books_generated: number
           chat_messages: number
           created_at: string
           date: string
@@ -255,6 +256,7 @@ export type Database = {
           voiceovers_generated: number
         }
         Insert: {
+          books_generated?: number
           chat_messages?: number
           created_at?: string
           date?: string
@@ -269,6 +271,7 @@ export type Database = {
           voiceovers_generated?: number
         }
         Update: {
+          books_generated?: number
           chat_messages?: number
           created_at?: string
           date?: string
@@ -378,10 +381,15 @@ export type Database = {
         }
         Returns: boolean
       }
-      increment_usage: {
-        Args: { _usage_type: string; _user_id: string }
-        Returns: undefined
-      }
+      increment_usage:
+        | {
+            Args: { _usage_type: string; _user_id: string }
+            Returns: undefined
+          }
+        | {
+            Args: { _amount?: number; _usage_type: string; _user_id: string }
+            Returns: undefined
+          }
     }
     Enums: {
       app_role: "free" | "premium" | "standard"

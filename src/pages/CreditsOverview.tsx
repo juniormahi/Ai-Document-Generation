@@ -10,7 +10,7 @@ import { Navigate, Link } from "react-router-dom";
 import { 
   Loader2, Crown, Zap, Image, Video, MessageSquare, 
   Volume2, FileText, Presentation, FileSpreadsheet,
-  TrendingUp, Calendar, RefreshCw
+  TrendingUp, Calendar, RefreshCw, BookOpen
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { TIER_LIMITS, type ToolCategory, type UserTier } from "@/hooks/useTierCredits";
@@ -23,6 +23,7 @@ interface UsageData {
   documents_generated: number;
   presentations_generated: number;
   spreadsheets_generated: number;
+  books_generated: number;
 }
 
 const TOOL_CONFIG: Record<ToolCategory, { name: string; icon: any; color: string; link: string }> = {
@@ -33,6 +34,7 @@ const TOOL_CONFIG: Record<ToolCategory, { name: string; icon: any; color: string
   documents_generated: { name: "Document Creator", icon: FileText, color: "text-blue-500", link: "/tools/document-creator" },
   presentations_generated: { name: "Presentation Maker", icon: Presentation, color: "text-orange-500", link: "/tools/presentation-maker" },
   spreadsheets_generated: { name: "Spreadsheet Generator", icon: FileSpreadsheet, color: "text-green-500", link: "/tools/spreadsheet-maker" },
+  books_generated: { name: "AI Book Creator", icon: BookOpen, color: "text-purple-500", link: "/tools/book-creator" },
 };
 
 export default function CreditsOverview() {
@@ -72,6 +74,7 @@ export default function CreditsOverview() {
         documents_generated: 0,
         presentations_generated: 0,
         spreadsheets_generated: 0,
+        books_generated: 0,
       });
     } catch (error) {
       console.error("Error fetching credits data:", error);

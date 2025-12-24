@@ -112,10 +112,10 @@ export const usageTrackingDb = {
     });
   },
 
-  async incrementUsage(usageType: string) {
+  async incrementUsage(usageType: string, amount: number = 1) {
     return callDatabaseProxy("rpc", "usage_tracking", {
       function_name: "increment_usage",
-      args: { _usage_type: usageType },
+      args: { _usage_type: usageType, _amount: amount },
     });
   },
 };

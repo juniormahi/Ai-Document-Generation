@@ -33,6 +33,7 @@ import DocumentCreator from "./pages/tools/DocumentCreator";
 import PresentationMaker from "./pages/tools/PresentationMaker";
 import AIWriter from "./pages/tools/AIWriter";
 import AIStoryGenerator from "./pages/tools/AIStoryGenerator";
+import AIBookCreator from "./pages/tools/AIBookCreator";
 import Spreadsheet from "./pages/tools/Spreadsheet";
 import Voiceover from "./pages/tools/Voiceover";
 import Chat from "./pages/tools/Chat";
@@ -98,6 +99,7 @@ function AnimatedRoutes() {
         <Route path="/tools/word-editor" element={<PageTransition><WordEditorPage /></PageTransition>} />
         <Route path="/tools/image-generator" element={<PageTransition><ImageGenerator /></PageTransition>} />
         <Route path="/tools/video-generator" element={<PageTransition><VideoGenerator /></PageTransition>} />
+        <Route path="/tools/book-creator" element={<PageTransition><AIBookCreator /></PageTransition>} />
         {/* Legacy routes - redirect */}
         <Route path="/tools/ai-writer" element={<Navigate to="/tools/writer" replace />} />
         <Route path="/tools/ai-story-generator" element={<Navigate to="/tools/story-generator" replace />} />

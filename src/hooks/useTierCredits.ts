@@ -9,7 +9,8 @@ export type ToolCategory =
   | 'voiceovers_generated'
   | 'documents_generated'
   | 'presentations_generated'
-  | 'spreadsheets_generated';
+  | 'spreadsheets_generated'
+  | 'books_generated';
 
 export type UserTier = 'free' | 'standard' | 'premium';
 
@@ -22,7 +23,35 @@ const TIER_LIMITS: Record<ToolCategory, Record<UserTier, number>> = {
   documents_generated: { free: 5, standard: 25, premium: 100 },
   presentations_generated: { free: 3, standard: 15, premium: 50 },
   spreadsheets_generated: { free: 5, standard: 25, premium: 100 },
+  books_generated: { free: 2, standard: 10, premium: 30 },
 };
+
+// Calculate credits based on content size
+export function calculateCredits(type: 'document' | 'presentation' | 'book', size: number): number {
+  // Small: 1 credit, Medium: 2 credits, Large: 3-5 credits
+  if (type === 'presentation') {
+    if (size <= 5) return 1;
+    if (size <= 10) return 2;
+    if (size <= 15) return 3;
+    if (size <= 20) return 4;
+    return 5; // 20+ slides
+  }
+  if (type === 'document') {
+    // Based on word count or sections
+    if (size <= 500) return 1;
+    if (size <= 1500) return 2;
+    if (size <= 3000) return 3;
+    if (size <= 5000) return 4;
+    return 5; // 5000+ words
+  }
+  if (type === 'book') {
+    // Books always cost more due to image generation
+    if (size <= 5) return 3; // 5 pages
+    if (size <= 10) return 5; // 10 pages
+    return 7; // 10+ pages
+  }
+  return 1;
+}
 
 interface UseTierCreditsResult {
   tier: UserTier;
