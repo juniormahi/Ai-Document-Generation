@@ -24,20 +24,21 @@ interface BookDetails {
   setting: string;
   moral: string;
   pageCount: number;
+  template?: string;
 }
 
 // Firebase Firestore REST API helper
 async function saveToFirestore(userId: string, bookData: any) {
   const projectId = 'document-gen-ai';
-  const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${userId}/books`;
+  const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${userId}/ebooks`;
   
-  // Convert book data to Firestore document format
   const firestoreDoc = {
     fields: {
       title: { stringValue: bookData.title },
       targetAge: { stringValue: bookData.targetAge },
       theme: { stringValue: bookData.theme },
       mainCharacter: { stringValue: bookData.mainCharacter },
+      template: { stringValue: bookData.template || 'classic' },
       createdAt: { timestampValue: new Date().toISOString() },
       pageCount: { integerValue: bookData.pages.length.toString() },
       pages: {
@@ -60,9 +61,7 @@ async function saveToFirestore(userId: string, bookData: any) {
   try {
     const response = await fetch(`${firestoreUrl}?key=${FIREBASE_API_KEY}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(firestoreDoc),
     });
 
@@ -73,7 +72,7 @@ async function saveToFirestore(userId: string, bookData: any) {
     }
 
     const result = await response.json();
-    console.log('Book saved to Firestore successfully');
+    console.log('Ebook saved to Firestore successfully');
     return result;
   } catch (error) {
     console.error('Error saving to Firestore:', error);
@@ -94,7 +93,7 @@ serve(async (req) => {
     }
 
     const userId = auth.userId;
-    console.log('Generating book for user:', userId);
+    console.log('Generating ebook for user:', userId);
 
     if (!GEMINI_API_KEY) {
       throw new Error('GEMINI_API_KEY is not configured');
@@ -106,58 +105,52 @@ serve(async (req) => {
       throw new Error('Book details are required');
     }
 
-    console.log('Book details:', bookDetails);
+    console.log('Ebook details:', bookDetails);
 
-    // Step 1: Generate the story structure with text for each page using Gemini API
-    const storyPrompt = `You are a children's book author. Create a ${bookDetails.pageCount}-page picture book story.
+    // Step 1: Generate the story structure using Gemini 3 Pro
+    const storyPrompt = `You are a professional ebook author. Create a ${bookDetails.pageCount}-page ebook.
 
-Book Details:
+Ebook Details:
 - Title: ${bookDetails.title}
 - Target Age: ${bookDetails.targetAge}
 - Theme: ${bookDetails.theme}
 - Main Character: ${bookDetails.mainCharacter}
 - Setting: ${bookDetails.setting}
 - Moral/Lesson: ${bookDetails.moral}
+- Style Template: ${bookDetails.template || 'classic'}
 
-Generate the complete story with exactly ${bookDetails.pageCount} pages. For each page, provide:
-1. The story text (2-4 sentences, age-appropriate language)
-2. A detailed image description for illustration (describe the scene, characters, colors, style)
+Generate the complete ebook with exactly ${bookDetails.pageCount} pages. For each page, provide:
+1. The story text (3-5 sentences, engaging and age-appropriate)
+2. A detailed image description for illustration
 
-Return as JSON array with this structure:
+Return as JSON with this structure:
 {
   "pages": [
     {
       "pageNumber": 1,
       "text": "Story text for this page...",
-      "imagePrompt": "Detailed illustration prompt: A colorful scene showing..."
+      "imagePrompt": "Detailed illustration prompt describing the scene..."
     }
   ]
 }
 
-Make the story engaging, educational, and suitable for children. Use vivid descriptions for the image prompts that would work well for AI image generation.`;
+Make the story engaging, educational, and suitable for the target age group.`;
 
-    // Generate story structure using Gemini API
-    const storyResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    // Generate story using Gemini 3 Pro Preview
+    console.log('Calling Gemini 3 Pro for story generation...');
+    const storyResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: storyPrompt }]
-          }
-        ],
-        generationConfig: {
-          responseMimeType: 'application/json',
-        },
+        contents: [{ parts: [{ text: storyPrompt }] }],
+        generationConfig: { responseMimeType: 'application/json' },
       }),
     });
 
     if (!storyResponse.ok) {
       const errorText = await storyResponse.text();
       console.error('Story generation error:', errorText);
-      throw new Error('Failed to generate story');
+      throw new Error('Failed to generate story with Gemini 3');
     }
 
     const storyData = await storyResponse.json();
@@ -174,33 +167,37 @@ Make the story engaging, educational, and suitable for children. Use vivid descr
     const pages: BookPage[] = parsedStory.pages || [];
     console.log(`Generated ${pages.length} pages of story`);
 
-    // Step 2: Generate images for each page using Gemini Imagen
+    // Step 2: Generate images using Nano Banana (gemini-2.0-flash-exp-image-generation)
     const pagesWithImages: BookPage[] = [];
-    const batchSize = 3;
+    const batchSize = 2;
     
     for (let i = 0; i < pages.length; i += batchSize) {
       const batch = pages.slice(i, i + batchSize);
-      console.log(`Generating images for pages ${i + 1} to ${Math.min(i + batchSize, pages.length)}...`);
+      console.log(`Generating images for pages ${i + 1} to ${Math.min(i + batchSize, pages.length)} using Nano Banana...`);
       
       const imagePromises = batch.map(async (page) => {
-        const imagePrompt = `Children's book illustration, colorful and whimsical style, ${page.imagePrompt}. Style: Pixar-like, vibrant colors, child-friendly, warm lighting, no text in image.`;
+        // Style based on template
+        let stylePrefix = "Children's book illustration, colorful and whimsical, Pixar-style";
+        if (bookDetails.template === 'watercolor') {
+          stylePrefix = "Watercolor painting style, soft colors, dreamy, artistic children's book illustration";
+        } else if (bookDetails.template === 'comic') {
+          stylePrefix = "Comic book style illustration, bold colors, dynamic, action-packed";
+        } else if (bookDetails.template === 'minimal') {
+          stylePrefix = "Minimalist illustration, clean lines, simple shapes, modern children's book style";
+        } else if (bookDetails.template === 'vintage') {
+          stylePrefix = "Vintage storybook illustration, classic style, warm sepia tones, nostalgic";
+        }
+        
+        const imagePrompt = `${stylePrefix}. ${page.imagePrompt}. No text in image, child-friendly, high quality.`;
 
         try {
-          // Using Gemini's image generation (Imagen 3)
+          // Using Nano Banana (Gemini image generation)
           const imageResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [
-                {
-                  parts: [{ text: imagePrompt }]
-                }
-              ],
-              generationConfig: {
-                responseModalities: ['TEXT', 'IMAGE'],
-              },
+              contents: [{ parts: [{ text: imagePrompt }] }],
+              generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
             }),
           });
 
@@ -211,8 +208,6 @@ Make the story engaging, educational, and suitable for children. Use vivid descr
           }
 
           const imageData = await imageResponse.json();
-          
-          // Extract base64 image from response
           const parts = imageData.candidates?.[0]?.content?.parts || [];
           let imageBase64 = undefined;
           
@@ -224,10 +219,7 @@ Make the story engaging, educational, and suitable for children. Use vivid descr
           }
           
           console.log(`Image generated for page ${page.pageNumber}`);
-          return {
-            ...page,
-            imageBase64,
-          };
+          return { ...page, imageBase64 };
         } catch (imgError) {
           console.error(`Error generating image for page ${page.pageNumber}:`, imgError);
           return { ...page, imageBase64: undefined };
@@ -237,13 +229,11 @@ Make the story engaging, educational, and suitable for children. Use vivid descr
       const batchResults = await Promise.all(imagePromises);
       pagesWithImages.push(...batchResults);
       
-      // Small delay between batches to avoid rate limiting
       if (i + batchSize < pages.length) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
-    // Calculate credits based on page count
     const creditCost = pages.length <= 5 ? 3 : pages.length <= 10 ? 5 : 7;
 
     const bookResult = {
@@ -251,17 +241,15 @@ Make the story engaging, educational, and suitable for children. Use vivid descr
       targetAge: bookDetails.targetAge,
       theme: bookDetails.theme,
       mainCharacter: bookDetails.mainCharacter,
+      template: bookDetails.template || 'classic',
       pages: pagesWithImages,
       creditCost,
     };
 
     // Save to Firebase Firestore
     const firestoreResult = await saveToFirestore(userId, bookResult);
-    if (firestoreResult) {
-      console.log('Book saved to Firebase Firestore');
-    }
-
-    console.log(`Book generated successfully with ${pagesWithImages.length} pages`);
+    
+    console.log(`Ebook generated successfully with ${pagesWithImages.length} pages`);
 
     return new Response(
       JSON.stringify({
@@ -272,7 +260,7 @@ Make the story engaging, educational, and suitable for children. Use vivid descr
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   } catch (error: unknown) {
-    console.error('Error generating book:', error);
+    console.error('Error generating ebook:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     return new Response(
       JSON.stringify({ error: errorMessage }),
