@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, BookOpen, Download, ChevronLeft, ChevronRight, Sparkles, Crown, Wand2, Edit, Image, Type, Palette, Save, X, Plus, Trash2 } from "lucide-react";
+import { Loader2, BookOpen, Download, ChevronLeft, ChevronRight, Sparkles, Crown, Wand2, Edit, Image, Type, Palette, Save, X, Plus, Trash2, FileText, Upload, FileUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Navigate, Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -16,7 +16,6 @@ import { useTierCredits, calculateCredits } from "@/hooks/useTierCredits";
 import { Progress } from "@/components/ui/progress";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import jsPDF from "jspdf";
 
@@ -53,6 +52,7 @@ const ebookTemplates: EbookTemplate[] = [
   { id: 'minimal', name: 'Modern Minimal', description: 'Clean, contemporary design', colors: { primary: '#2C3E50', secondary: '#FFFFFF', accent: '#3498DB' }, font: 'Helvetica, sans-serif', preview: '✨' },
   { id: 'vintage', name: 'Vintage Tales', description: 'Nostalgic, sepia-toned classic look', colors: { primary: '#704214', secondary: '#F5F5DC', accent: '#8B7355' }, font: 'Times New Roman, serif', preview: '📜' },
   { id: 'fantasy', name: 'Fantasy Kingdom', description: 'Magical, enchanting fairy tale style', colors: { primary: '#6A0DAD', secondary: '#E6E6FA', accent: '#FFD700' }, font: 'Garamond, serif', preview: '🏰' },
+  { id: 'business', name: 'Professional', description: 'Clean business and educational style', colors: { primary: '#1a365d', secondary: '#f7fafc', accent: '#3182ce' }, font: 'Helvetica, sans-serif', preview: '📊' },
 ];
 
 const sampleBooks = [
@@ -75,6 +75,12 @@ export default function AIEbookGenerator() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedBook, setEditedBook] = useState<GeneratedBook | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
+  
+  // Input mode
+  const [inputMode, setInputMode] = useState<'form' | 'document' | 'text'>('form');
+  const [sourceText, setSourceText] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState("");
   
   // Form state
   const [title, setTitle] = useState("");
@@ -114,6 +120,31 @@ export default function AIEbookGenerator() {
     toast({ title: "Auto-filled!", description: `Using template: "${randomBook.title}"` });
   };
 
+  const handleDocumentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setUploadedFileName(file.name);
+    
+    // Read text from file
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      setSourceText(text);
+      toast({ title: "Document Loaded", description: `"${file.name}" has been loaded successfully.` });
+    };
+    reader.onerror = () => {
+      toast({ title: "Error", description: "Failed to read the document.", variant: "destructive" });
+    };
+    
+    if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+      reader.readAsText(file);
+    } else {
+      // For other file types, try to read as text
+      reader.readAsText(file);
+    }
+  };
+
   if (authLoading || creditsLoading) {
     return (
       <DashboardLayout>
@@ -129,9 +160,21 @@ export default function AIEbookGenerator() {
   }
 
   const handleGenerate = async () => {
-    if (!title.trim() || !theme.trim() || !mainCharacter.trim()) {
-      toast({ title: "Missing Information", description: "Please fill in the title, theme, and main character.", variant: "destructive" });
-      return;
+    // Validation based on input mode
+    if (inputMode === 'form') {
+      if (!title.trim() || !theme.trim() || !mainCharacter.trim()) {
+        toast({ title: "Missing Information", description: "Please fill in the title, theme, and main character.", variant: "destructive" });
+        return;
+      }
+    } else {
+      if (!title.trim()) {
+        toast({ title: "Missing Information", description: "Please provide a title for your ebook.", variant: "destructive" });
+        return;
+      }
+      if (!sourceText.trim()) {
+        toast({ title: "Missing Content", description: "Please paste text or upload a document.", variant: "destructive" });
+        return;
+      }
     }
 
     if (!canGenerate) {
@@ -148,15 +191,8 @@ export default function AIEbookGenerator() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 300000);
       
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-book`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          ...headers,
-        },
-        body: JSON.stringify({
-          bookDetails: {
+      const bookDetails = inputMode === 'form' 
+        ? {
             title,
             targetAge,
             theme,
@@ -165,8 +201,29 @@ export default function AIEbookGenerator() {
             moral: moral || "being kind to others",
             pageCount: parseInt(pageCount),
             template: selectedTemplate,
+            sourceType: 'form',
           }
-        }),
+        : {
+            title,
+            targetAge,
+            theme: "Generated from provided content",
+            mainCharacter: "From source content",
+            setting: "",
+            moral: "",
+            pageCount: parseInt(pageCount),
+            template: selectedTemplate,
+            sourceType: inputMode,
+            sourceText: sourceText,
+          };
+      
+      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-book`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          ...headers,
+        },
+        body: JSON.stringify({ bookDetails }),
         signal: controller.signal,
       });
       
@@ -449,7 +506,7 @@ export default function AIEbookGenerator() {
                   {isEditing ? (
                     <Textarea value={currentPageData?.text || ''} onChange={(e) => handleEditText(currentPage, e.target.value)} className="min-h-[200px] text-lg" style={{ fontFamily: selectedFont, fontSize: `${fontSize}px` }} />
                   ) : (
-                    <p className="text-xl leading-relaxed" style={{ fontFamily: selectedFont, fontSize: `${fontSize}px`, color: currentTemplate.colors.primary }}>
+                    <p className="text-xl leading-relaxed whitespace-pre-wrap" style={{ fontFamily: selectedFont, fontSize: `${fontSize}px`, color: currentTemplate.colors.primary }}>
                       {currentPageData?.text}
                     </p>
                   )}
@@ -462,7 +519,7 @@ export default function AIEbookGenerator() {
               <Button variant="ghost" onClick={() => setCurrentPage(Math.max(0, currentPage - 1))} disabled={currentPage === 0} className="gap-2">
                 <ChevronLeft className="h-4 w-4" /> Previous
               </Button>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap justify-center">
                 {displayBook.pages.map((_, idx) => (
                   <button key={idx} onClick={() => setCurrentPage(idx)} className={`w-3 h-3 rounded-full transition-colors ${currentPage === idx ? 'bg-primary' : 'bg-muted-foreground/30'}`} />
                 ))}
@@ -493,7 +550,7 @@ export default function AIEbookGenerator() {
   // Creation Form View
   return (
     <DashboardLayout>
-      <SEO title="AI Ebook Generator - Create Ebooks with AI | mydocmaker" description="Create beautiful AI-generated ebooks with custom templates. Edit text, add images, change fonts, and download as PDF." keywords="ai ebook generator, ebook creator, ai book maker, ebook templates" canonical="/tools/ebook-generator" />
+      <SEO title="AI Ebook Generator - Create Ebooks with AI | mydocmaker" description="Create beautiful AI-generated ebooks with custom templates. Upload documents, paste text, or use our form. Edit and download as PDF." keywords="ai ebook generator, ebook creator, ai book maker, ebook templates, document to ebook" canonical="/tools/ebook-generator" />
       
       <div className="max-w-4xl mx-auto">
         {/* Hero */}
@@ -502,7 +559,7 @@ export default function AIEbookGenerator() {
             <BookOpen className="h-8 w-8 text-purple-500" />
           </div>
           <h1 className="text-3xl font-bold mb-2">AI Ebook Generator</h1>
-          <p className="text-muted-foreground text-lg">Create beautiful ebooks with AI, edit them, and download as PDF</p>
+          <p className="text-muted-foreground text-lg">Create beautiful ebooks from documents, text, or story ideas - with AI images, graphics & tables</p>
         </div>
 
         {/* Credits Info */}
@@ -533,90 +590,228 @@ export default function AIEbookGenerator() {
             <CardDescription>Select a style for your ebook</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {ebookTemplates.map((template) => (
                 <button key={template.id} onClick={() => setSelectedTemplate(template.id)} className={`p-4 rounded-lg border-2 text-left transition-all ${selectedTemplate === template.id ? 'border-primary ring-2 ring-primary/30' : 'border-border hover:border-primary/50'}`} style={{ backgroundColor: template.colors.secondary }}>
                   <div className="text-2xl mb-2">{template.preview}</div>
                   <div className="font-medium text-sm" style={{ color: template.colors.primary }}>{template.name}</div>
-                  <div className="text-xs text-muted-foreground mt-1">{template.description}</div>
+                  <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{template.description}</div>
                 </button>
               ))}
             </div>
           </CardContent>
         </Card>
 
-        {/* Form */}
-        <Card>
+        {/* Input Mode Selection */}
+        <Card className="mb-6">
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-primary" /> Ebook Details
-                </CardTitle>
-                <CardDescription>Fill in the details for your ebook</CardDescription>
-              </div>
-              <Button variant="outline" size="sm" onClick={handleAutoFill} className="gap-2">
-                <Wand2 className="h-4 w-4" /> Auto Fill
-              </Button>
-            </div>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" /> Content Source
+            </CardTitle>
+            <CardDescription>Choose how to create your ebook</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Ebook Title *</Label>
-                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="The Magical Adventure" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="age">Target Age Group</Label>
-                <Select value={targetAge} onValueChange={setTargetAge}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0-2">0-2 years (Baby)</SelectItem>
-                    <SelectItem value="3-5">3-5 years (Preschool)</SelectItem>
-                    <SelectItem value="6-8">6-8 years (Early Reader)</SelectItem>
-                    <SelectItem value="9-12">9-12 years (Middle Grade)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+          <CardContent>
+            <Tabs value={inputMode} onValueChange={(v) => setInputMode(v as 'form' | 'document' | 'text')}>
+              <TabsList className="grid grid-cols-3 mb-6">
+                <TabsTrigger value="form" className="gap-2">
+                  <Wand2 className="h-4 w-4" /> Story Form
+                </TabsTrigger>
+                <TabsTrigger value="document" className="gap-2">
+                  <FileUp className="h-4 w-4" /> Upload Document
+                </TabsTrigger>
+                <TabsTrigger value="text" className="gap-2">
+                  <Type className="h-4 w-4" /> Paste Text
+                </TabsTrigger>
+              </TabsList>
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="character">Main Character *</Label>
-                <Input id="character" value={mainCharacter} onChange={(e) => setMainCharacter(e.target.value)} placeholder="A brave little bunny named Bella" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="setting">Setting</Label>
-                <Input id="setting" value={setting} onChange={(e) => setSetting(e.target.value)} placeholder="An enchanted forest" />
-              </div>
-            </div>
+              {/* Form Mode */}
+              <TabsContent value="form" className="space-y-6">
+                <div className="flex justify-end">
+                  <Button variant="outline" size="sm" onClick={handleAutoFill} className="gap-2">
+                    <Wand2 className="h-4 w-4" /> Auto Fill
+                  </Button>
+                </div>
+                
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="title">Ebook Title *</Label>
+                    <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="The Magical Adventure" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="age">Target Age Group</Label>
+                    <Select value={targetAge} onValueChange={setTargetAge}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0-2">0-2 years (Baby)</SelectItem>
+                        <SelectItem value="3-5">3-5 years (Preschool)</SelectItem>
+                        <SelectItem value="6-8">6-8 years (Early Reader)</SelectItem>
+                        <SelectItem value="9-12">9-12 years (Middle Grade)</SelectItem>
+                        <SelectItem value="teen">Teenager</SelectItem>
+                        <SelectItem value="adult">Adult</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="theme">Story Theme *</Label>
-              <Textarea id="theme" value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="A story about making new friends and overcoming shyness" rows={2} />
-            </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="character">Main Character *</Label>
+                    <Input id="character" value={mainCharacter} onChange={(e) => setMainCharacter(e.target.value)} placeholder="A brave little bunny named Bella" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="setting">Setting</Label>
+                    <Input id="setting" value={setting} onChange={(e) => setSetting(e.target.value)} placeholder="An enchanted forest" />
+                  </div>
+                </div>
 
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="moral">Moral/Lesson</Label>
-                <Input id="moral" value={moral} onChange={(e) => setMoral(e.target.value)} placeholder="Kindness and friendship" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="pages">Number of Pages</Label>
-                <Select value={pageCount} onValueChange={setPageCount}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">5 pages (3 credits)</SelectItem>
-                    <SelectItem value="8">8 pages (5 credits)</SelectItem>
-                    <SelectItem value="10">10 pages (5 credits)</SelectItem>
-                    <SelectItem value="12">12 pages (7 credits)</SelectItem>
-                    <SelectItem value="15">15 pages (7 credits)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="theme">Story Theme *</Label>
+                  <Textarea id="theme" value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="A story about making new friends and overcoming shyness" rows={2} />
+                </div>
 
-            <Button onClick={handleGenerate} disabled={loading || !canGenerate} className="w-full gap-2" size="lg">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="moral">Moral/Lesson</Label>
+                    <Input id="moral" value={moral} onChange={(e) => setMoral(e.target.value)} placeholder="Kindness and friendship" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="pages">Number of Pages</Label>
+                    <Select value={pageCount} onValueChange={setPageCount}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="5">5 pages (3 credits)</SelectItem>
+                        <SelectItem value="8">8 pages (5 credits)</SelectItem>
+                        <SelectItem value="10">10 pages (5 credits)</SelectItem>
+                        <SelectItem value="12">12 pages (7 credits)</SelectItem>
+                        <SelectItem value="15">15 pages (7 credits)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Document Upload Mode */}
+              <TabsContent value="document" className="space-y-6">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="doc-title">Ebook Title *</Label>
+                    <Input id="doc-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="My Ebook Title" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="doc-age">Target Audience</Label>
+                    <Select value={targetAge} onValueChange={setTargetAge}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3-5">Children (3-5)</SelectItem>
+                        <SelectItem value="6-8">Children (6-8)</SelectItem>
+                        <SelectItem value="9-12">Pre-teens (9-12)</SelectItem>
+                        <SelectItem value="teen">Teenagers</SelectItem>
+                        <SelectItem value="adult">Adults</SelectItem>
+                        <SelectItem value="professional">Professionals</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Upload Document</Label>
+                  <div className="border-2 border-dashed rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer" onClick={() => documentInputRef.current?.click()}>
+                    <input type="file" ref={documentInputRef} accept=".txt,.md,.doc,.docx" onChange={handleDocumentUpload} className="hidden" />
+                    <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
+                    {uploadedFileName ? (
+                      <div>
+                        <p className="font-medium text-primary">{uploadedFileName}</p>
+                        <p className="text-sm text-muted-foreground mt-1">Click to upload a different file</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="font-medium">Click to upload a document</p>
+                        <p className="text-sm text-muted-foreground mt-1">Supports .txt, .md files</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {sourceText && (
+                  <div className="space-y-2">
+                    <Label>Document Preview</Label>
+                    <div className="bg-muted/50 rounded-lg p-4 max-h-48 overflow-y-auto">
+                      <p className="text-sm whitespace-pre-wrap">{sourceText.slice(0, 500)}{sourceText.length > 500 && '...'}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{sourceText.length} characters loaded</p>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="doc-pages">Number of Pages</Label>
+                  <Select value={pageCount} onValueChange={setPageCount}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 pages (3 credits)</SelectItem>
+                      <SelectItem value="8">8 pages (5 credits)</SelectItem>
+                      <SelectItem value="10">10 pages (5 credits)</SelectItem>
+                      <SelectItem value="12">12 pages (7 credits)</SelectItem>
+                      <SelectItem value="15">15 pages (7 credits)</SelectItem>
+                      <SelectItem value="20">20 pages (10 credits)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </TabsContent>
+
+              {/* Text Paste Mode */}
+              <TabsContent value="text" className="space-y-6">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="text-title">Ebook Title *</Label>
+                    <Input id="text-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="My Ebook Title" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="text-age">Target Audience</Label>
+                    <Select value={targetAge} onValueChange={setTargetAge}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="3-5">Children (3-5)</SelectItem>
+                        <SelectItem value="6-8">Children (6-8)</SelectItem>
+                        <SelectItem value="9-12">Pre-teens (9-12)</SelectItem>
+                        <SelectItem value="teen">Teenagers</SelectItem>
+                        <SelectItem value="adult">Adults</SelectItem>
+                        <SelectItem value="professional">Professionals</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="source-text">Paste Your Content *</Label>
+                  <Textarea 
+                    id="source-text" 
+                    value={sourceText} 
+                    onChange={(e) => setSourceText(e.target.value)} 
+                    placeholder="Paste your content here. The AI will transform it into a beautifully formatted ebook with images, graphics, and tables..."
+                    rows={10}
+                    className="font-mono text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">{sourceText.length} characters</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="text-pages">Number of Pages</Label>
+                  <Select value={pageCount} onValueChange={setPageCount}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5 pages (3 credits)</SelectItem>
+                      <SelectItem value="8">8 pages (5 credits)</SelectItem>
+                      <SelectItem value="10">10 pages (5 credits)</SelectItem>
+                      <SelectItem value="12">12 pages (7 credits)</SelectItem>
+                      <SelectItem value="15">15 pages (7 credits)</SelectItem>
+                      <SelectItem value="20">20 pages (10 credits)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            <Button onClick={handleGenerate} disabled={loading || !canGenerate} className="w-full gap-2 mt-6" size="lg">
               {loading ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Creating Your Ebook... (This may take a few minutes)</>
               ) : (
@@ -625,8 +820,8 @@ export default function AIEbookGenerator() {
             </Button>
 
             {loading && (
-              <div className="text-center text-sm text-muted-foreground">
-                <p>Generating story and illustrations with Gemini 3 & Nano Banana...</p>
+              <div className="text-center text-sm text-muted-foreground mt-4">
+                <p>Generating content and AI illustrations with Gemini...</p>
                 <Progress value={undefined} className="h-1 mt-2" />
               </div>
             )}
@@ -634,8 +829,9 @@ export default function AIEbookGenerator() {
         </Card>
 
         <div className="mt-6 text-center text-sm text-muted-foreground">
-          <p>Edit your ebook after generation: change text, add images, modify fonts.</p>
-          <p>Download your finished ebook as a professionally formatted PDF!</p>
+          <p>✨ AI generates images, graphics, tables and more for your ebook</p>
+          <p>📝 Edit your ebook after generation: change text, add images, modify fonts</p>
+          <p>📄 Download your finished ebook as a professionally formatted PDF!</p>
         </div>
       </div>
     </DashboardLayout>
