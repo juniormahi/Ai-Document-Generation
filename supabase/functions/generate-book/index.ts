@@ -23,9 +23,8 @@ interface BookDetails {
   mainCharacter: string;
   setting: string;
   moral: string;
-  pageCount: number;
   template?: string;
-  sourceText?: string; // For document/text input
+  sourceText?: string;
   sourceType?: 'form' | 'document' | 'text';
 }
 
@@ -109,13 +108,16 @@ serve(async (req) => {
 
     console.log('Ebook details:', bookDetails);
 
-    // Build story prompt based on source type
+    // Build story prompt based on source type - AI determines optimal page count
     let storyPrompt = '';
     
     if (bookDetails.sourceType === 'document' || bookDetails.sourceType === 'text') {
-      // Generate from provided document/text content
+      // Calculate suggested page count based on content length
+      const contentLength = (bookDetails.sourceText || '').length;
+      const suggestedPages = Math.max(5, Math.min(25, Math.ceil(contentLength / 500)));
+      
       storyPrompt = `You are a professional ebook author and content transformer. 
-Convert the following content into an engaging ${bookDetails.pageCount}-page ebook with illustrations.
+Convert the following content into a complete, engaging ebook with illustrations.
 
 SOURCE CONTENT:
 ${bookDetails.sourceText}
@@ -124,30 +126,34 @@ EBOOK REQUIREMENTS:
 - Title: ${bookDetails.title}
 - Target Audience: ${bookDetails.targetAge}
 - Style Template: ${bookDetails.template || 'classic'}
-- Number of Pages: ${bookDetails.pageCount}
 
-Transform this content into an ebook format:
-1. Break the content into ${bookDetails.pageCount} logical sections/pages
-2. Rewrite each section in an engaging, clear style
-3. Create detailed image/graphic descriptions for each page (charts, diagrams, illustrations, infographics)
-4. Include tables where data presentation would be helpful
-5. Make it visually appealing and easy to understand
+YOUR TASK:
+1. Analyze the content and determine the OPTIMAL number of pages (suggested: around ${suggestedPages} pages based on content length)
+2. Break the content into logical sections/chapters
+3. Rewrite each section in an engaging, professional style
+4. Create detailed image/graphic descriptions for each page (charts, diagrams, illustrations, infographics, tables)
+5. Include visual elements like:
+   - Infographics for data
+   - Illustrations for concepts
+   - Tables for comparisons
+   - Diagrams for processes
+   - Charts for statistics
 
 Return as JSON with this structure:
 {
   "pages": [
     {
       "pageNumber": 1,
-      "text": "Page content with formatted text, bullet points, tables as needed...",
-      "imagePrompt": "Detailed description for an illustration, chart, diagram, or infographic for this page..."
+      "text": "Page content with formatted text, bullet points, key insights...",
+      "imagePrompt": "Detailed description for an illustration, chart, diagram, infographic, or table visualization for this page..."
     }
   ]
 }
 
-Make the ebook professional, engaging, and suitable for the target audience. Include visual elements like tables (formatted in text), key points, and clear explanations.`;
+IMPORTANT: Generate as many pages as needed to cover the content completely. Each page should have meaningful content and a relevant visual element. Make it professional, engaging, and visually rich.`;
     } else {
-      // Generate from form details (original behavior)
-      storyPrompt = `You are a professional ebook author. Create a ${bookDetails.pageCount}-page ebook.
+      // Generate from form details - AI determines story length
+      storyPrompt = `You are a professional children's ebook author. Create a complete, engaging illustrated ebook.
 
 Ebook Details:
 - Title: ${bookDetails.title}
@@ -158,9 +164,10 @@ Ebook Details:
 - Moral/Lesson: ${bookDetails.moral}
 - Style Template: ${bookDetails.template || 'classic'}
 
-Generate the complete ebook with exactly ${bookDetails.pageCount} pages. For each page, provide:
-1. The story text (3-5 sentences, engaging and age-appropriate)
-2. A detailed image description for illustration
+YOUR TASK:
+1. Create a complete story with the OPTIMAL number of pages for this story (typically 8-15 pages for children's books)
+2. Each page should have engaging story text (3-5 sentences, age-appropriate)
+3. Each page needs a detailed illustration description
 
 Return as JSON with this structure:
 {
@@ -168,15 +175,20 @@ Return as JSON with this structure:
     {
       "pageNumber": 1,
       "text": "Story text for this page...",
-      "imagePrompt": "Detailed illustration prompt describing the scene..."
+      "imagePrompt": "Detailed illustration prompt describing the scene, characters, setting, mood, colors..."
     }
   ]
 }
 
-Make the story engaging, educational, and suitable for the target age group.`;
+IMPORTANT: 
+- Create a COMPLETE story with proper beginning, middle, and end
+- Include character development and story arc
+- Make each page visually distinct and interesting
+- End with the moral/lesson naturally woven into the story
+- Generate as many pages as the story needs to be complete and engaging`;
     }
 
-    // Generate story using Gemini 2.5 Flash (stable and available)
+    // Generate story using Gemini 2.0 Flash
     console.log('Calling Gemini API for story generation...');
     const storyResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
@@ -215,9 +227,9 @@ Make the story engaging, educational, and suitable for the target age group.`;
     }
 
     const pages: BookPage[] = parsedStory.pages || [];
-    console.log(`Generated ${pages.length} pages of story`);
+    console.log(`Generated ${pages.length} pages of story (AI determined)`);
 
-    // Step 2: Generate images using Imagen 3 via Gemini API
+    // Step 2: Generate images using Gemini image generation
     const pagesWithImages: BookPage[] = [];
     const batchSize = 2;
     
@@ -290,7 +302,8 @@ Make the story engaging, educational, and suitable for the target age group.`;
       }
     }
 
-    const creditCost = pages.length <= 5 ? 3 : pages.length <= 10 ? 5 : 7;
+    // Calculate credits based on actual pages generated
+    const creditCost = pages.length <= 5 ? 3 : pages.length <= 10 ? 5 : pages.length <= 15 ? 7 : 10;
 
     const bookResult = {
       title: bookDetails.title,
@@ -305,7 +318,7 @@ Make the story engaging, educational, and suitable for the target age group.`;
     // Save to Firebase Firestore
     const firestoreResult = await saveToFirestore(userId, bookResult);
     
-    console.log(`Ebook generated successfully with ${pagesWithImages.length} pages`);
+    console.log(`Ebook generated successfully with ${pagesWithImages.length} pages (AI determined optimal length)`);
 
     return new Response(
       JSON.stringify({
