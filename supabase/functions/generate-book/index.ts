@@ -25,6 +25,8 @@ interface BookDetails {
   moral: string;
   pageCount: number;
   template?: string;
+  sourceText?: string; // For document/text input
+  sourceType?: 'form' | 'document' | 'text';
 }
 
 // Firebase Firestore REST API helper
@@ -107,8 +109,45 @@ serve(async (req) => {
 
     console.log('Ebook details:', bookDetails);
 
-    // Step 1: Generate the story structure using Gemini 3 Pro
-    const storyPrompt = `You are a professional ebook author. Create a ${bookDetails.pageCount}-page ebook.
+    // Build story prompt based on source type
+    let storyPrompt = '';
+    
+    if (bookDetails.sourceType === 'document' || bookDetails.sourceType === 'text') {
+      // Generate from provided document/text content
+      storyPrompt = `You are a professional ebook author and content transformer. 
+Convert the following content into an engaging ${bookDetails.pageCount}-page ebook with illustrations.
+
+SOURCE CONTENT:
+${bookDetails.sourceText}
+
+EBOOK REQUIREMENTS:
+- Title: ${bookDetails.title}
+- Target Audience: ${bookDetails.targetAge}
+- Style Template: ${bookDetails.template || 'classic'}
+- Number of Pages: ${bookDetails.pageCount}
+
+Transform this content into an ebook format:
+1. Break the content into ${bookDetails.pageCount} logical sections/pages
+2. Rewrite each section in an engaging, clear style
+3. Create detailed image/graphic descriptions for each page (charts, diagrams, illustrations, infographics)
+4. Include tables where data presentation would be helpful
+5. Make it visually appealing and easy to understand
+
+Return as JSON with this structure:
+{
+  "pages": [
+    {
+      "pageNumber": 1,
+      "text": "Page content with formatted text, bullet points, tables as needed...",
+      "imagePrompt": "Detailed description for an illustration, chart, diagram, or infographic for this page..."
+    }
+  ]
+}
+
+Make the ebook professional, engaging, and suitable for the target audience. Include visual elements like tables (formatted in text), key points, and clear explanations.`;
+    } else {
+      // Generate from form details (original behavior)
+      storyPrompt = `You are a professional ebook author. Create a ${bookDetails.pageCount}-page ebook.
 
 Ebook Details:
 - Title: ${bookDetails.title}
@@ -135,26 +174,37 @@ Return as JSON with this structure:
 }
 
 Make the story engaging, educational, and suitable for the target age group.`;
+    }
 
-    // Generate story using Gemini 3 Pro Preview
-    console.log('Calling Gemini 3 Pro for story generation...');
-    const storyResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${GEMINI_API_KEY}`, {
+    // Generate story using Gemini 2.5 Flash (stable and available)
+    console.log('Calling Gemini API for story generation...');
+    const storyResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: storyPrompt }] }],
-        generationConfig: { responseMimeType: 'application/json' },
+        generationConfig: { 
+          responseMimeType: 'application/json',
+          temperature: 0.8,
+        },
       }),
     });
 
     if (!storyResponse.ok) {
       const errorText = await storyResponse.text();
       console.error('Story generation error:', errorText);
-      throw new Error('Failed to generate story with Gemini 3');
+      throw new Error(`Failed to generate story: ${errorText}`);
     }
 
     const storyData = await storyResponse.json();
+    console.log('Story API response received');
+    
     const storyContent = storyData.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!storyContent) {
+      console.error('No content in response:', JSON.stringify(storyData));
+      throw new Error('No content generated from AI');
+    }
     
     let parsedStory;
     try {
@@ -167,37 +217,43 @@ Make the story engaging, educational, and suitable for the target age group.`;
     const pages: BookPage[] = parsedStory.pages || [];
     console.log(`Generated ${pages.length} pages of story`);
 
-    // Step 2: Generate images using Nano Banana (gemini-2.0-flash-exp-image-generation)
+    // Step 2: Generate images using Imagen 3 via Gemini API
     const pagesWithImages: BookPage[] = [];
     const batchSize = 2;
     
     for (let i = 0; i < pages.length; i += batchSize) {
       const batch = pages.slice(i, i + batchSize);
-      console.log(`Generating images for pages ${i + 1} to ${Math.min(i + batchSize, pages.length)} using Nano Banana...`);
+      console.log(`Generating images for pages ${i + 1} to ${Math.min(i + batchSize, pages.length)}...`);
       
       const imagePromises = batch.map(async (page) => {
         // Style based on template
-        let stylePrefix = "Children's book illustration, colorful and whimsical, Pixar-style";
+        let stylePrefix = "Professional ebook illustration, clean and modern";
         if (bookDetails.template === 'watercolor') {
-          stylePrefix = "Watercolor painting style, soft colors, dreamy, artistic children's book illustration";
+          stylePrefix = "Watercolor painting style, soft colors, dreamy, artistic illustration";
         } else if (bookDetails.template === 'comic') {
-          stylePrefix = "Comic book style illustration, bold colors, dynamic, action-packed";
+          stylePrefix = "Comic book style illustration, bold colors, dynamic";
         } else if (bookDetails.template === 'minimal') {
-          stylePrefix = "Minimalist illustration, clean lines, simple shapes, modern children's book style";
+          stylePrefix = "Minimalist illustration, clean lines, simple shapes, modern style";
         } else if (bookDetails.template === 'vintage') {
-          stylePrefix = "Vintage storybook illustration, classic style, warm sepia tones, nostalgic";
+          stylePrefix = "Vintage illustration, classic style, warm sepia tones, nostalgic";
+        } else if (bookDetails.template === 'fantasy') {
+          stylePrefix = "Fantasy art illustration, magical, detailed, epic";
+        } else if (bookDetails.template === 'business') {
+          stylePrefix = "Professional business infographic, clean data visualization, corporate style";
         }
         
-        const imagePrompt = `${stylePrefix}. ${page.imagePrompt}. No text in image, child-friendly, high quality.`;
+        const imagePrompt = `${stylePrefix}. ${page.imagePrompt}. No text in image, high quality, detailed.`;
 
         try {
-          // Using Nano Banana (Gemini image generation)
+          // Using Gemini 2.0 Flash with image generation
           const imageResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${GEMINI_API_KEY}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: imagePrompt }] }],
-              generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+              contents: [{ parts: [{ text: `Generate an image: ${imagePrompt}` }] }],
+              generationConfig: { 
+                responseModalities: ['TEXT', 'IMAGE']
+              },
             }),
           });
 
@@ -218,7 +274,7 @@ Make the story engaging, educational, and suitable for the target age group.`;
             }
           }
           
-          console.log(`Image generated for page ${page.pageNumber}`);
+          console.log(`Image generated for page ${page.pageNumber}: ${imageBase64 ? 'success' : 'no image data'}`);
           return { ...page, imageBase64 };
         } catch (imgError) {
           console.error(`Error generating image for page ${page.pageNumber}:`, imgError);
@@ -230,7 +286,7 @@ Make the story engaging, educational, and suitable for the target age group.`;
       pagesWithImages.push(...batchResults);
       
       if (i + batchSize < pages.length) {
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 1500));
       }
     }
 
