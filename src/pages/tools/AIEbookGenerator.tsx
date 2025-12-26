@@ -89,7 +89,6 @@ export default function AIEbookGenerator() {
   const [mainCharacter, setMainCharacter] = useState("");
   const [setting, setSetting] = useState("");
   const [moral, setMoral] = useState("");
-  const [pageCount, setPageCount] = useState("8");
   const [selectedTemplate, setSelectedTemplate] = useState("classic");
   
   // Editor state
@@ -105,8 +104,7 @@ export default function AIEbookGenerator() {
     refetch
   } = useTierCredits('books_generated');
   
-  const estimatedCredits = calculateCredits('book', parseInt(pageCount));
-  const canGenerate = creditsUsed + estimatedCredits <= creditLimit;
+  const canGenerate = creditsUsed < creditLimit;
 
   const handleAutoFill = () => {
     const randomBook = sampleBooks[Math.floor(Math.random() * sampleBooks.length)];
@@ -178,7 +176,7 @@ export default function AIEbookGenerator() {
     }
 
     if (!canGenerate) {
-      toast({ title: "Insufficient Credits", description: `This ebook requires ${estimatedCredits} credits.`, variant: "destructive" });
+      toast({ title: "Insufficient Credits", description: "You have reached your credit limit.", variant: "destructive" });
       return;
     }
 
@@ -199,7 +197,6 @@ export default function AIEbookGenerator() {
             mainCharacter,
             setting: setting || "a magical world",
             moral: moral || "being kind to others",
-            pageCount: parseInt(pageCount),
             template: selectedTemplate,
             sourceType: 'form',
           }
@@ -210,7 +207,6 @@ export default function AIEbookGenerator() {
             mainCharacter: "From source content",
             setting: "",
             moral: "",
-            pageCount: parseInt(pageCount),
             template: selectedTemplate,
             sourceType: inputMode,
             sourceText: sourceText,
@@ -571,7 +567,7 @@ export default function AIEbookGenerator() {
             </div>
             <Progress value={(creditsUsed / creditLimit) * 100} className="h-2" />
             <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-muted-foreground">Estimated: {estimatedCredits} credits ({parseInt(pageCount)} pages)</span>
+              <span className="text-xs text-muted-foreground">Credits vary based on generated content</span>
               {!isPremium && (
                 <Link to="/subscription" className="text-xs text-primary hover:underline flex items-center gap-1">
                   <Crown className="h-3 w-3" /> {getUpgradeMessage()}
@@ -669,24 +665,14 @@ export default function AIEbookGenerator() {
                   <Textarea id="theme" value={theme} onChange={(e) => setTheme(e.target.value)} placeholder="A story about making new friends and overcoming shyness" rows={2} />
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="moral">Moral/Lesson</Label>
-                    <Input id="moral" value={moral} onChange={(e) => setMoral(e.target.value)} placeholder="Kindness and friendship" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pages">Number of Pages</Label>
-                    <Select value={pageCount} onValueChange={setPageCount}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="5">5 pages (3 credits)</SelectItem>
-                        <SelectItem value="8">8 pages (5 credits)</SelectItem>
-                        <SelectItem value="10">10 pages (5 credits)</SelectItem>
-                        <SelectItem value="12">12 pages (7 credits)</SelectItem>
-                        <SelectItem value="15">15 pages (7 credits)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="moral">Moral/Lesson</Label>
+                  <Input id="moral" value={moral} onChange={(e) => setMoral(e.target.value)} placeholder="Kindness and friendship" />
+                </div>
+
+                <div className="p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+                  <Sparkles className="h-4 w-4 inline mr-2" />
+                  AI will automatically determine the optimal number of pages based on your story
                 </div>
               </TabsContent>
 
@@ -742,19 +728,9 @@ export default function AIEbookGenerator() {
                   </div>
                 )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="doc-pages">Number of Pages</Label>
-                  <Select value={pageCount} onValueChange={setPageCount}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5 pages (3 credits)</SelectItem>
-                      <SelectItem value="8">8 pages (5 credits)</SelectItem>
-                      <SelectItem value="10">10 pages (5 credits)</SelectItem>
-                      <SelectItem value="12">12 pages (7 credits)</SelectItem>
-                      <SelectItem value="15">15 pages (7 credits)</SelectItem>
-                      <SelectItem value="20">20 pages (10 credits)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+                  <Sparkles className="h-4 w-4 inline mr-2" />
+                  AI will automatically determine the optimal number of pages based on your document content
                 </div>
               </TabsContent>
 
@@ -794,19 +770,9 @@ export default function AIEbookGenerator() {
                   <p className="text-xs text-muted-foreground">{sourceText.length} characters</p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="text-pages">Number of Pages</Label>
-                  <Select value={pageCount} onValueChange={setPageCount}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="5">5 pages (3 credits)</SelectItem>
-                      <SelectItem value="8">8 pages (5 credits)</SelectItem>
-                      <SelectItem value="10">10 pages (5 credits)</SelectItem>
-                      <SelectItem value="12">12 pages (7 credits)</SelectItem>
-                      <SelectItem value="15">15 pages (7 credits)</SelectItem>
-                      <SelectItem value="20">20 pages (10 credits)</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <div className="p-3 bg-muted/50 rounded-lg text-sm text-muted-foreground">
+                  <Sparkles className="h-4 w-4 inline mr-2" />
+                  AI will automatically determine the optimal number of pages based on your content
                 </div>
               </TabsContent>
             </Tabs>
@@ -815,7 +781,7 @@ export default function AIEbookGenerator() {
               {loading ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Creating Your Ebook... (This may take a few minutes)</>
               ) : (
-                <><Sparkles className="h-4 w-4" /> Generate Ebook ({estimatedCredits} credits)</>
+                <><Sparkles className="h-4 w-4" /> Generate Complete Ebook</>
               )}
             </Button>
 
