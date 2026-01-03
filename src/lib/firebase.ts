@@ -4,15 +4,16 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getAnalytics } from "firebase/analytics";
 
+// Firebase configuration from environment variables
 const firebaseConfig = {
-  apiKey: "AIzaSyDV6gc3t5e-9Alg_pl0CXNxzVdO5rLN30Q",
-  authDomain: "document-gen-ai.firebaseapp.com",
-  databaseURL: "https://document-gen-ai-default-rtdb.firebaseio.com",
-  projectId: "document-gen-ai",
-  storageBucket: "document-gen-ai.firebasestorage.app",
-  messagingSenderId: "818204957612",
-  appId: "1:818204957612:web:e2e4dabd276db98147b809",
-  measurementId: "G-ZCJS5Z3CJP"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 let app: ReturnType<typeof initializeApp>;
