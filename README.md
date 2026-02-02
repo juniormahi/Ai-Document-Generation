@@ -1,4 +1,4 @@
-# 🚀 MYDOCMAKER: THE ULTIMATE AI PRODUCTIVITY ENGINE
+# 🚀 MYDOCMAKER: THE ULTIMATE AI PRODUCTIVITY ENGINE -Updated
 
 <div align="center">
   <img src="src/assets/logo.png" alt="MyDocMaker Logo" width="120" />
